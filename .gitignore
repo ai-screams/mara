@@ -1,0 +1,19 @@
+# Internal docs — never commit (per project rule)
+.docs/
+
+# Tooling / agent state
+.omc/
+.serena/
+.superpowers/
+.DS_Store
+
+# XcodeGen output (generated from project.yml)
+Sleepless.xcodeproj/
+
+# Build artifacts
+build/
+DerivedData/
+.swiftpm/
+SleeplessCore/.build/
+*.xcuserstate
+xcuserdata/
