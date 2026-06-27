@@ -1,12 +1,16 @@
 import SwiftUI
+import SleeplessCore
 
 @main
 struct SleeplessApp: App {
+    @StateObject private var env = AppEnvironment()
+
     var body: some Scene {
-        MenuBarExtra("Sleepless", systemImage: "cup.and.saucer") {
-            Text("Sleepless 0.1.0")
-            Divider()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
+        MenuBarExtra {
+            MenuBarView(session: env.session)
+        } label: {
+            Image(systemName: env.session.state.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
         }
+        .menuBarExtraStyle(.menu)
     }
 }
