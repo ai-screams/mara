@@ -59,3 +59,29 @@ extension SessionManagerTests {
         XCTAssertFalse(sm.state.isActive)
     }
 }
+
+extension SessionManagerTests {
+    private func makeSUTWithBattery(threshold: Int = 20, percentage: Int = 100, isOnAC: Bool = true)
+        -> (SessionManager, MockBattery) {
+        let p = MockPowerAssertionProvider()
+        let engine = SleepEngine(provider: p)
+        let battery = MockBattery(percentage: percentage, isOnAC: isOnAC)
+        let sm = SessionManager(engine: engine, scheduler: MockScheduler(), clock: MockClock(),
+                                battery: battery, lowBatteryThreshold: threshold)
+        return (sm, battery)
+    }
+
+    func test_lowBatteryOnBattery_stopsActiveSession() {
+        let (sm, battery) = makeSUTWithBattery(threshold: 20)
+        sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        battery.emit(percentage: 15, isOnAC: false)
+        XCTAssertFalse(sm.state.isActive)
+    }
+
+    func test_lowBatteryButOnAC_doesNotStop() {
+        let (sm, battery) = makeSUTWithBattery(threshold: 20)
+        sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        battery.emit(percentage: 5, isOnAC: true)
+        XCTAssertTrue(sm.state.isActive)
+    }
+}

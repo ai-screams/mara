@@ -7,12 +7,28 @@ public final class SessionManager: ObservableObject {
     private let engine: SleepEngine
     private let scheduler: Scheduling
     private let clock: Clock
+    private let battery: BatteryMonitoring?
+    private let lowBatteryThreshold: Int
     private var timer: Cancellable?
 
-    public init(engine: SleepEngine, scheduler: Scheduling, clock: Clock) {
+    public init(engine: SleepEngine,
+                scheduler: Scheduling,
+                clock: Clock,
+                battery: BatteryMonitoring? = nil,
+                lowBatteryThreshold: Int = 20) {
         self.engine = engine
         self.scheduler = scheduler
         self.clock = clock
+        self.battery = battery
+        self.lowBatteryThreshold = lowBatteryThreshold
+        self.battery?.onChange = { [weak self] snap in self?.handleBattery(snap) }
+    }
+
+    private func handleBattery(_ snap: BatterySnapshot) {
+        guard state.isActive else { return }
+        if !snap.isOnAC && snap.percentage <= lowBatteryThreshold {
+            stop()   // 최우선 거부권
+        }
     }
 
     public func start(_ config: SessionConfig) {
