@@ -12,5 +12,8 @@ struct SleeplessApp: App {
             Image(systemName: env.session.state.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
         }
         .menuBarExtraStyle(.menu)
+        Settings {
+            SettingsView(prefs: env.prefs)
+        }
     }
 }

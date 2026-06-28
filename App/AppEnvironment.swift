@@ -4,6 +4,7 @@ import SleeplessCore
 @MainActor
 final class AppEnvironment: ObservableObject {
     let session: SessionManager
+    let prefs = PrefsStore()
     private var hotkey: HotkeyManager?
 
     init() {
