@@ -20,6 +20,10 @@ struct MenuBarView: View {
             durationButton("5 hours", 5 * 60 * 60)
         }
         Toggle("Keep display awake", isOn: displayBinding)
+        Toggle("Launch at Login", isOn: Binding(
+            get: { LaunchAtLogin.isEnabled },
+            set: { LaunchAtLogin.setEnabled($0) }
+        ))
         Divider()
         Button("Quit Sleepless") { NSApplication.shared.terminate(nil) }
     }
