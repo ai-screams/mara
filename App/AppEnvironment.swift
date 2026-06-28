@@ -18,7 +18,7 @@ final class AppEnvironment: ObservableObject {
         installHotkey()
     }
 
-    func installHotkey() {
+    private func installHotkey() {
         let cfg = SessionConfig(scope: .displayAndSystem, duration: .indefinite, origin: .manual)
         let hk = HotkeyManager(onToggle: { [weak self] in
             Task { @MainActor in self?.session.toggle(cfg) }
