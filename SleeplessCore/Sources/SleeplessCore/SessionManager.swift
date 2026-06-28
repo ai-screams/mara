@@ -8,7 +8,7 @@ public final class SessionManager: ObservableObject {
     private let scheduler: Scheduling
     private let clock: Clock
     private let battery: BatteryMonitoring?
-    private let lowBatteryThreshold: Int
+    public var lowBatteryThreshold: Int
     private var timer: Cancellable?
 
     public init(engine: SleepEngine,
@@ -42,6 +42,7 @@ public final class SessionManager: ObservableObject {
                 self?.stop()
             }
         }
+        if let snap = battery?.snapshot { handleBattery(snap) }
     }
 
     public func stop() {

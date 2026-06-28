@@ -1,5 +1,3 @@
-import Foundation
-
 public final class SleepEngine {
     private let provider: PowerAssertionProviding
     private let name: String

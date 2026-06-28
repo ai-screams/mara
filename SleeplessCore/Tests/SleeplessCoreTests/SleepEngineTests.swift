@@ -1,5 +1,13 @@
 import XCTest
+import IOKit.pwr_mgt
 @testable import SleeplessCore
+
+final class PowerAssertionTypeMappingTests: XCTestCase {
+    func test_ioKitName_isNotSwapped() {
+        XCTAssertEqual(PowerAssertionType.preventDisplaySleep.ioKitName, kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString)
+        XCTAssertEqual(PowerAssertionType.preventSystemSleep.ioKitName, kIOPMAssertionTypePreventUserIdleSystemSleep as CFString)
+    }
+}
 
 final class PowerAssertionContractTests: XCTestCase {
     func test_create_thenRelease_leavesNoLiveAssertions() {

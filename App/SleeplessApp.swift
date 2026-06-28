@@ -7,7 +7,7 @@ struct SleeplessApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(session: env.session)
+            MenuBarView(session: env.session, prefs: env.prefs)
         } label: {
             Image(systemName: env.session.state.isActive ? "cup.and.saucer.fill" : "cup.and.saucer")
         }

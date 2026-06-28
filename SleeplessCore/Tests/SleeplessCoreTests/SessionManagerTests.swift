@@ -84,4 +84,16 @@ extension SessionManagerTests {
         battery.emit(percentage: 5, isOnAC: true)
         XCTAssertTrue(sm.state.isActive)
     }
+
+    func test_startWhileBelowThresholdOnBattery_immediatelyStops() {
+        let (sm, _) = makeSUTWithBattery(threshold: 20, percentage: 10, isOnAC: false)
+        sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        XCTAssertFalse(sm.state.isActive)
+    }
+
+    func test_startWhileBelowThresholdOnAC_staysActive() {
+        let (sm, _) = makeSUTWithBattery(threshold: 20, percentage: 10, isOnAC: true)
+        sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        XCTAssertTrue(sm.state.isActive)
+    }
 }

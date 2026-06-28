@@ -3,9 +3,11 @@ import SleeplessCore
 
 struct MenuBarView: View {
     @ObservedObject var session: SessionManager
+    @ObservedObject var prefs: PrefsStore
 
     private var defaultConfig: SessionConfig {
-        SessionConfig(scope: .displayAndSystem, duration: .indefinite, origin: .manual)
+        let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
+        return SessionConfig(scope: scope, duration: .indefinite, origin: .manual)
     }
 
     var body: some View {
@@ -29,9 +31,9 @@ struct MenuBarView: View {
     }
 
     private func durationButton(_ title: String, _ seconds: TimeInterval) -> some View {
-        Button(title) {
-            session.start(SessionConfig(scope: .displayAndSystem,
-                                        duration: .duration(seconds), origin: .manual))
+        let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
+        return Button(title) {
+            session.start(SessionConfig(scope: scope, duration: .duration(seconds), origin: .manual))
         }
     }
 
