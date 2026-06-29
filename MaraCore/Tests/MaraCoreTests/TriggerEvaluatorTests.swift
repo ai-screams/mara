@@ -29,6 +29,20 @@ extension TriggerEvaluatorTests {
 }
 
 extension TriggerEvaluatorTests {
+    func test_appRunningTrigger_satisfiedWhenWatchedAppRuns() {
+        let apps = MockApps(["com.apple.Safari"])
+        let t = AppRunningTrigger(apps: apps, watched: ["com.foo.bar"])
+        XCTAssertFalse(t.isSatisfied)
+        var received: [Bool] = []
+        let c = t.satisfied.sink { received.append($0) }
+        apps.set(["com.apple.Safari", "com.foo.bar"])  // 감시 앱 실행
+        apps.set(["com.apple.Safari"])                  // 종료
+        c.cancel()
+        XCTAssertEqual(received, [false, true, false])
+    }
+}
+
+extension TriggerEvaluatorTests {
     func test_chargingTrigger_followsACState() {
         let bat = MockBattery(percentage: 80, isOnAC: false)
         let t = ChargingTrigger(battery: bat)
