@@ -40,7 +40,13 @@ final class AppEnvironment: ObservableObject {
             evaluators.append(AppRunningTrigger(apps: NSWorkspaceAppsObserver(),
                                                 watched: Set(cfg.watchedBundleIDs)))
         }
-        guard !evaluators.isEmpty else { triggerEngine = nil; return }
+        guard !evaluators.isEmpty else {
+            if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
+                session.stop()
+            }
+            triggerEngine = nil
+            return
+        }
         let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
         let te = TriggerEngine(session: session, evaluators: evaluators, scope: scope)
         te.start()
