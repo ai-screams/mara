@@ -13,8 +13,8 @@ final class TriggerEngineTests: XCTestCase {
     func test_triggerRising_startsTriggerSession() {
         let (sm, _) = makeSession()
         let t = MockTrigger(satisfied: false)
-        let engine = TriggerEngine(session: sm, evaluators: [t], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
         XCTAssertFalse(sm.state.isActive)
         t.set(true)
         XCTAssertTrue(sm.state.isActive)
@@ -24,8 +24,8 @@ final class TriggerEngineTests: XCTestCase {
     func test_triggerFalling_stopsTriggerSession() {
         let (sm, _) = makeSession()
         let t = MockTrigger(satisfied: true)
-        let engine = TriggerEngine(session: sm, evaluators: [t], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
         XCTAssertTrue(sm.state.isActive)   // 시작 시 이미 true면 켜짐
         t.set(false)
         XCTAssertFalse(sm.state.isActive)
@@ -35,8 +35,8 @@ final class TriggerEngineTests: XCTestCase {
         let (sm, _) = makeSession()
         let a = MockTrigger(kind: .charging, satisfied: false)
         let b = MockTrigger(kind: .appRunning, satisfied: false)
-        let engine = TriggerEngine(session: sm, evaluators: [a, b], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([a, b])
         a.set(true); XCTAssertTrue(sm.state.isActive)
         a.set(false); XCTAssertFalse(sm.state.isActive)  // b 아직 false
         b.set(true); XCTAssertTrue(sm.state.isActive)
@@ -51,8 +51,8 @@ extension TriggerEngineTests {
     func test_manualActive_triggerDoesNotOverrideOrStop() {
         let (sm, _) = makeSession()
         let t = MockTrigger(satisfied: false)
-        let engine = TriggerEngine(session: sm, evaluators: [t], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
         sm.start(manualConfig())          // 사용자가 수동 ON
         t.set(true)                        // 트리거도 true
         // 여전히 수동 세션이어야 함 (트리거가 덮어쓰지 않음)
@@ -65,8 +65,8 @@ extension TriggerEngineTests {
     func test_manualStopWhileTriggerTrue_suppressesUntilTriggerDrops() {
         let (sm, _) = makeSession()
         let t = MockTrigger(satisfied: true)
-        let engine = TriggerEngine(session: sm, evaluators: [t], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
         XCTAssertTrue(sm.state.isActive)   // 트리거로 켜짐
         sm.stop()                          // 사용자가 수동으로 끔 (트리거 여전히 true)
         XCTAssertFalse(sm.state.isActive)
@@ -77,21 +77,61 @@ extension TriggerEngineTests {
         XCTAssertTrue(sm.state.isActive)
     }
 
-    // 현재 구현에서 실제로 RED가 되는 테스트:
-    // sm.stop() 후 평가기가 이벤트를 재방출하면(트리거 여전히 true) 세션이 재시작되어서는 안 된다.
     func test_manualStopWhileTriggerTrue_evaluatorReemit_doesNotRestart() {
         let (sm, _) = makeSession()
         let a = MockTrigger(kind: .charging, satisfied: true)
         let b = MockTrigger(kind: .appRunning, satisfied: false)
-        let engine = TriggerEngine(session: sm, evaluators: [a, b], scope: .systemOnly)
-        engine.start()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([a, b])
         XCTAssertTrue(sm.state.isActive)     // a가 true → 세션 시작
         sm.stop()                             // 수동 종료 (a 여전히 true) → suppressed
         XCTAssertFalse(sm.state.isActive)
         b.set(true)                           // 다른 평가기 이벤트 발생 — 억제 중이므로 재시작 금지
-        XCTAssertFalse(sm.state.isActive)    // 현재 구현은 여기서 isActive=true → FAIL
+        XCTAssertFalse(sm.state.isActive)
         a.set(false); b.set(false)            // 모든 트리거 false → 재무장
         a.set(true)                           // 다시 충족 → 재시작 허용
         XCTAssertTrue(sm.state.isActive)
+    }
+}
+
+extension TriggerEngineTests {
+    // 트리거로 켠 뒤 수동 OFF(suppressed) 상태가, 평가기 재조정(설정 변경)에도 살아남아야 한다.
+    func test_suppression_survivesUpdateEvaluators() {
+        let (sm, _) = makeSession()
+        let t = MockTrigger(kind: .charging, satisfied: true)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
+        XCTAssertTrue(sm.state.isActive)      // 트리거로 켜짐
+        sm.stop()                              // 사용자가 수동 OFF (트리거 여전히 true)
+        XCTAssertFalse(sm.state.isActive)
+        // 설정 변경을 모사: 동일 트리거 유지한 채 재조정
+        engine.updateEvaluators([t])
+        XCTAssertFalse(sm.state.isActive)      // suppressed 유지 → 재가동 안 됨 (M1)
+        // 다른 트리거를 추가해도 여전히 억제 상태여야 함
+        let t2 = MockTrigger(kind: .externalDisplay, satisfied: true)
+        engine.updateEvaluators([t, t2])
+        XCTAssertFalse(sm.state.isActive)      // 여전히 suppressed
+    }
+
+    // 재조정으로 모든 트리거가 사라지면 trigger-origin 세션은 정지된다(orphan 방지).
+    func test_updateEvaluators_toEmpty_stopsTriggerSession() {
+        let (sm, _) = makeSession()
+        let t = MockTrigger(kind: .charging, satisfied: true)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
+        XCTAssertTrue(sm.state.isActive)
+        engine.updateEvaluators([])            // 모든 트리거 비활성화
+        XCTAssertFalse(sm.state.isActive)
+    }
+
+    // 재조정은 변하지 않은 kind의 구독을 유지한다(스모크: 여러 번 호출해도 동작 일관).
+    func test_updateEvaluators_idempotentForUnchangedEvaluator() {
+        let (sm, _) = makeSession()
+        let t = MockTrigger(kind: .charging, satisfied: false)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
+        engine.updateEvaluators([t])   // 동일 인스턴스 재조정
+        t.set(true)
+        XCTAssertTrue(sm.state.isActive)   // 구독이 살아있어 반응
     }
 }

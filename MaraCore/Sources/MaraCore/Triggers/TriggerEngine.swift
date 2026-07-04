@@ -2,67 +2,67 @@ import Combine
 
 public final class TriggerEngine {
     private let session: SessionManager
-    private let evaluators: [TriggerEvaluator]
-    private let scope: KeepAwakeScope
-    private var cancellables = Set<AnyCancellable>()
-    private var running = false
-    private var suppressed = false
-    private var lastActive = false   // 직전 세션 활성 여부 (수동 stop 감지용)
+    private let scope: () -> KeepAwakeScope
 
-    public init(session: SessionManager, evaluators: [TriggerEvaluator], scope: KeepAwakeScope) {
+    // kind별 활성 평가기와 그 구독 (재조정 대상)
+    private var active: [TriggerKind: (evaluator: TriggerEvaluator, cancellable: AnyCancellable)] = [:]
+    private var sessionCancellable: AnyCancellable?
+    private var suppressed = false
+    private var lastActive = false
+
+    public init(session: SessionManager, scope: @escaping () -> KeepAwakeScope) {
         self.session = session
-        self.evaluators = evaluators
         self.scope = scope
+        self.lastActive = session.state.isActive
+        // 세션 상태 구독은 수명 내내 유지 (수동 종료 감지 → suppression)
+        sessionCancellable = session.$state.sink { [weak self] state in self?.handleSessionChange(state) }
     }
 
-    public var isAnySatisfied: Bool { evaluators.contains { $0.isSatisfied } }
+    public var isAnySatisfied: Bool { active.values.contains { $0.evaluator.isSatisfied } }
 
-    public func start() {
-        guard !running else { return }
-        running = true
-        lastActive = session.state.isActive
-        // 각 평가기의 변화를 구독 → 매 변화마다 OR 재평가
-        for e in evaluators {
-            e.satisfied
-                .sink { [weak self] _ in self?.reevaluate() }
-                .store(in: &cancellables)
+    /// 원하는 평가기 목록으로 구독을 재조정한다. kind별 하나를 가정한다.
+    /// 변하지 않은 kind는 구독을 유지하고, 추가/교체/제거만 반영한다. suppression은 보존된다.
+    public func updateEvaluators(_ evaluators: [TriggerEvaluator]) {
+        let desired = Dictionary(evaluators.map { ($0.kind, $0) }, uniquingKeysWith: { _, last in last })
+        // 제거된 kind
+        for kind in active.keys where desired[kind] == nil {
+            active[kind] = nil   // AnyCancellable deinit → 구독 해제
         }
-        // 세션 상태 변화 구독 → 수동 종료 감지 및 suppression 적용
-        session.$state
-            .sink { [weak self] state in self?.handleSessionChange(state) }
-            .store(in: &cancellables)
+        // 추가되거나 인스턴스가 바뀐 kind
+        for (kind, evaluator) in desired {
+            if active[kind]?.evaluator === evaluator { continue }   // 동일 인스턴스 → 유지
+            let c = evaluator.satisfied.sink { [weak self] _ in self?.reevaluate() }
+            active[kind] = (evaluator, c)
+        }
         reevaluate()
     }
 
     public func stop() {
-        running = false
-        cancellables.removeAll()
+        active.removeAll()
+        sessionCancellable = nil
     }
 
     private func handleSessionChange(_ state: SessionState) {
-        let active = state.isActive
-        // 세션이 active → inactive 로 떨어졌는데 트리거가 여전히 충족이면,
-        // 이는 사용자/타이머/배터리에 의한 종료이므로 트리거 재가동을 억제한다(재무장 전까지).
-        if lastActive && !active && isAnySatisfied {
+        let isActive = state.isActive
+        // active → inactive 인데 트리거가 여전히 충족이면, 사용자/타이머/배터리 종료이므로 재무장 전까지 억제.
+        if lastActive && !isActive && isAnySatisfied {
             suppressed = true
         }
-        lastActive = active
+        lastActive = isActive
     }
 
     private func reevaluate() {
-        let any = isAnySatisfied
-        if !any {
-            suppressed = false   // 모든 트리거가 false → 재무장
+        guard isAnySatisfied else {
+            suppressed = false   // 모든 트리거 false → 재무장
             if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
                 session.stop()
             }
             return
         }
-        // any == true
         guard !suppressed else { return }
         if !session.state.isActive {
-            session.start(SessionConfig(scope: scope, duration: .indefinite, origin: .trigger))
+            session.start(SessionConfig(scope: scope(), duration: .indefinite, origin: .trigger))
         }
-        // 세션이 이미 활성(수동 포함)이면 아무것도 안 함 — 수동 > 트리거
+        // 이미 활성(수동 포함)이면 no-op — 수동 > 트리거
     }
 }
