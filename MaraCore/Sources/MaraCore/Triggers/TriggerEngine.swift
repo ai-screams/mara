@@ -9,6 +9,8 @@ public final class TriggerEngine {
     private var sessionCancellable: AnyCancellable?
     private var suppressed = false
     private var lastActive = false
+    // 재조정 중 중간 reevaluate() 호출을 막는 플래그
+    private var reconciling = false
 
     public init(session: SessionManager, scope: @escaping () -> KeepAwakeScope) {
         self.session = session
@@ -24,6 +26,7 @@ public final class TriggerEngine {
     /// 변하지 않은 kind는 구독을 유지하고, 추가/교체/제거만 반영한다. suppression은 보존된다.
     public func updateEvaluators(_ evaluators: [TriggerEvaluator]) {
         let desired = Dictionary(evaluators.map { ($0.kind, $0) }, uniquingKeysWith: { _, last in last })
+        reconciling = true
         // 제거된 kind
         for kind in active.keys where desired[kind] == nil {
             active[kind] = nil   // AnyCancellable deinit → 구독 해제
@@ -34,12 +37,17 @@ public final class TriggerEngine {
             let c = evaluator.satisfied.sink { [weak self] _ in self?.reevaluate() }
             active[kind] = (evaluator, c)
         }
-        reevaluate()
+        reconciling = false
+        reevaluate()   // 재조정 완료 후 딱 한 번만 평가
     }
 
     public func stop() {
         active.removeAll()
         sessionCancellable = nil
+        // trigger-origin 세션이 활성이면 함께 종료 (orphan 방지)
+        if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
+            session.stop()
+        }
     }
 
     private func handleSessionChange(_ state: SessionState) {
@@ -52,6 +60,7 @@ public final class TriggerEngine {
     }
 
     private func reevaluate() {
+        guard !reconciling else { return }   // 재조정 중 중간 호출 → no-op
         guard isAnySatisfied else {
             suppressed = false   // 모든 트리거 false → 재무장
             if case let .active(cfg, _) = session.state, cfg.origin == .trigger {

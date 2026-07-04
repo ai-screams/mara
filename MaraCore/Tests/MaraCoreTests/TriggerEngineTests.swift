@@ -135,3 +135,54 @@ extension TriggerEngineTests {
         XCTAssertTrue(sm.state.isActive)   // 구독이 살아있어 반응
     }
 }
+
+extension TriggerEngineTests {
+    // 동일 kind의 평가기 인스턴스 교체 시 중간 stop/start(assertion 해제·재취득)가 없어야 한다.
+    func test_updateEvaluators_replacingInstance_noSpuriousChurn() {
+        let (sm, p) = makeSession()
+        let t1 = MockTrigger(kind: .charging, satisfied: true)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t1])
+        XCTAssertTrue(sm.state.isActive)
+        if case let .active(cfg, _) = sm.state { XCTAssertEqual(cfg.origin, .trigger) } else { XCTFail("expected trigger session") }
+
+        // assertion 토큰을 기록 — 해제+재취득이 없으면 동일 토큰 집합이 유지된다
+        let tokensBefore = Set(p.live.keys)
+        XCTAssertFalse(tokensBefore.isEmpty, "assertion should be held before swap")
+
+        // 동일 kind, 다른 인스턴스, 동일하게 satisfied=true 인 평가기로 교체
+        let t2 = MockTrigger(kind: .charging, satisfied: true)
+        engine.updateEvaluators([t2])
+
+        // 세션은 trigger-active 상태를 유지해야 하고 assertion 토큰이 바뀌지 않아야 한다
+        XCTAssertTrue(sm.state.isActive, "session must stay active after instance swap")
+        if case let .active(cfg, _) = sm.state { XCTAssertEqual(cfg.origin, .trigger) } else { XCTFail("expected trigger session") }
+        XCTAssertEqual(Set(p.live.keys), tokensBefore, "power assertion was spuriously released and reacquired")
+    }
+
+    // engine.stop() 은 trigger-origin 세션을 함께 종료해야 한다.
+    func test_stop_stopsActiveTriggerSession() {
+        let (sm, _) = makeSession()
+        let t = MockTrigger(kind: .charging, satisfied: true)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
+        XCTAssertTrue(sm.state.isActive)
+        if case let .active(cfg, _) = sm.state { XCTAssertEqual(cfg.origin, .trigger) } else { XCTFail() }
+        engine.stop()
+        XCTAssertFalse(sm.state.isActive, "trigger session must be stopped by engine.stop()")
+    }
+
+    // engine.stop() 은 수동 세션을 중단하지 않아야 한다.
+    func test_stop_doesNotStopManualSession() {
+        let (sm, _) = makeSession()
+        let t = MockTrigger(kind: .charging, satisfied: false)
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        engine.updateEvaluators([t])
+        sm.start(SessionConfig(scope: .displayAndSystem, duration: .indefinite, origin: .manual))
+        XCTAssertTrue(sm.state.isActive)
+        if case let .active(cfg, _) = sm.state { XCTAssertEqual(cfg.origin, .manual) } else { XCTFail() }
+        engine.stop()
+        XCTAssertTrue(sm.state.isActive, "manual session must survive engine.stop()")
+        if case let .active(cfg, _) = sm.state { XCTAssertEqual(cfg.origin, .manual) } else { XCTFail() }
+    }
+}
