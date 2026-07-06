@@ -6,6 +6,12 @@ public enum KeepAwakeScope: Equatable {
     public var keepsDisplayAwake: Bool { self == .displayAndSystem }
 }
 
+public extension KeepAwakeScope {
+    init(keepDisplay: Bool) {
+        self = keepDisplay ? .displayAndSystem : .systemOnly
+    }
+}
+
 public enum SessionDuration: Equatable {
     case indefinite
     case duration(TimeInterval)
@@ -23,6 +29,12 @@ public struct SessionConfig: Equatable {
     public var origin: SessionOrigin
     public init(scope: KeepAwakeScope, duration: SessionDuration, origin: SessionOrigin) {
         self.scope = scope; self.duration = duration; self.origin = origin
+    }
+}
+
+public extension SessionConfig {
+    func withScope(_ scope: KeepAwakeScope) -> SessionConfig {
+        SessionConfig(scope: scope, duration: duration, origin: origin)
     }
 }
 

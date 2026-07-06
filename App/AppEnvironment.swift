@@ -6,51 +6,51 @@ import MaraCore
 final class AppEnvironment: ObservableObject {
     let session: SessionManager
     let prefs = PrefsStore()
+
+    // OS 어댑터는 앱 수명 동안 1회만 생성 (수동 관찰 → config 무관, churn 제거)
     private let battery = IOKitBatteryMonitor()
-    private var triggerEngine: TriggerEngine?
+    private let screens = NSScreenCounter()
+    private let apps = NSWorkspaceAppsObserver()
+
+    private let triggerEngine: TriggerEngine
     // 글로벌 핫키 기능 보류(비활성화) — 코드는 보존, 재활성화 시 주석 해제.
     // private var hotkey: HotkeyManager?
     private var cancellables = Set<AnyCancellable>()
 
     init() {
         let engine = SleepEngine(provider: IOKitPowerAssertionProvider())
-        session = SessionManager(
+        let session = SessionManager(
             engine: engine,
             scheduler: DispatchScheduler(queue: .main),
             clock: SystemClock(),
             battery: battery,
             lowBatteryThreshold: prefs.lowBatteryThreshold
         )
+        self.session = session
+        // 트리거 엔진은 1회 생성(durable) — suppression이 config 변경에도 유지됨
+        let prefs = self.prefs
+        self.triggerEngine = TriggerEngine(session: session, scope: { prefs.defaultScope })
+
         prefs.$lowBatteryThreshold
-            .sink { [weak self] newValue in self?.session.lowBatteryThreshold = newValue }
+            .dropFirst()   // 초기값 재방출 무시 (init에서 이미 반영)
+            .sink { [weak self] v in self?.session.lowBatteryThreshold = v }
             .store(in: &cancellables)
-        rebuildTriggers(prefs.triggerConfig)
+        reconcileTriggers(prefs.triggerConfig)
         prefs.$triggerConfig
-            .sink { [weak self] cfg in self?.rebuildTriggers(cfg) }
+            .dropFirst()   // 초기값 재방출 무시 (위에서 한 번 반영함)
+            .sink { [weak self] cfg in self?.reconcileTriggers(cfg) }
             .store(in: &cancellables)
         // installHotkey()  // 글로벌 핫키 보류
     }
 
-    private func rebuildTriggers(_ cfg: TriggerConfig) {
-        triggerEngine?.stop()
+    private func reconcileTriggers(_ cfg: TriggerConfig) {
         var evaluators: [TriggerEvaluator] = []
         if cfg.chargingEnabled { evaluators.append(ChargingTrigger(battery: battery)) }
-        if cfg.externalDisplayEnabled { evaluators.append(ExternalDisplayTrigger(screens: NSScreenCounter())) }
+        if cfg.externalDisplayEnabled { evaluators.append(ExternalDisplayTrigger(screens: screens)) }
         if cfg.appRunningEnabled && !cfg.watchedBundleIDs.isEmpty {
-            evaluators.append(AppRunningTrigger(apps: NSWorkspaceAppsObserver(),
-                                                watched: Set(cfg.watchedBundleIDs)))
+            evaluators.append(AppRunningTrigger(apps: apps, watched: Set(cfg.watchedBundleIDs)))
         }
-        guard !evaluators.isEmpty else {
-            if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
-                session.stop()
-            }
-            triggerEngine = nil
-            return
-        }
-        let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
-        let te = TriggerEngine(session: session, evaluators: evaluators, scope: scope)
-        te.start()
-        triggerEngine = te
+        triggerEngine.updateEvaluators(evaluators)
     }
 
     // 글로벌 핫키 기능 보류(비활성화). 삭제하지 않고 보존 — 재활성화하려면 위 호출과

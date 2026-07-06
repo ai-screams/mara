@@ -6,7 +6,7 @@ struct MenuBarView: View {
     @ObservedObject var prefs: PrefsStore
 
     private var defaultConfig: SessionConfig {
-        let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
+        let scope = prefs.defaultScope
         return SessionConfig(scope: scope, duration: .indefinite, origin: .manual)
     }
 
@@ -34,7 +34,7 @@ struct MenuBarView: View {
     }
 
     private func durationButton(_ title: String, _ seconds: TimeInterval) -> some View {
-        let scope: KeepAwakeScope = prefs.defaultKeepDisplayAwake ? .displayAndSystem : .systemOnly
+        let scope = prefs.defaultScope
         return Button(title) {
             session.start(SessionConfig(scope: scope, duration: .duration(seconds), origin: .manual))
         }
@@ -44,11 +44,11 @@ struct MenuBarView: View {
         Binding(
             get: {
                 if case let .active(cfg, _) = session.state { return cfg.scope.keepsDisplayAwake }
-                return true
+                return prefs.defaultKeepDisplayAwake   // idle 시 사용자 기본값 반영 (하드코딩 true 제거)
             },
             set: { keepDisplay in
-                let scope: KeepAwakeScope = keepDisplay ? .displayAndSystem : .systemOnly
-                session.start(SessionConfig(scope: scope, duration: .indefinite, origin: .manual))
+                prefs.defaultKeepDisplayAwake = keepDisplay          // 기본 설정 갱신(영속)
+                session.updateScope(KeepAwakeScope(keepDisplay: keepDisplay))  // active면 restart 없이 라이브 반영
             }
         )
     }
