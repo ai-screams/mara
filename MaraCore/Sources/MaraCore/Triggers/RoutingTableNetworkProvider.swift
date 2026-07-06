@@ -8,11 +8,13 @@ public final class RoutingTableNetworkProvider: NetworkIdentityProviding {
     private let monitor: NWPathMonitor
 
     public init() {
+        // Intentional one-shot startup read: runs on the launch/main path before monitor starts.
         subject = CurrentValueSubject(Self.readGatewayIdentity())
         monitor = NWPathMonitor()
         let queue = DispatchQueue(label: "com.mara.RoutingTableNetworkProvider")
         monitor.pathUpdateHandler = { [weak self] _ in
-            self?.subject.send(Self.readGatewayIdentity())
+            let id = Self.readGatewayIdentity() // sysctl stays off-main
+            DispatchQueue.main.async { self?.subject.send(id) }
         }
         monitor.start(queue: queue)
     }
