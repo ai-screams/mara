@@ -26,7 +26,31 @@ private struct MenuBarLabel: View {
     @ObservedObject var session: SessionManager
 
     var body: some View {
-        Image(nsImage: MenuBarLabel.statusIcon(active: session.state.isActive))
+        HStack(spacing: 2) {
+            Image(nsImage: MenuBarLabel.statusIcon(active: session.state.isActive))
+            // 활성 시 아이콘 오른쪽에 지속시간 표기 (15m / 1h / ∞).
+            if let label = durationLabel {
+                Text(label).font(.system(size: 12, weight: .medium))
+            }
+        }
+    }
+
+    /// 활성 세션의 지속시간 라벨. 비활성이면 nil(표기 없음).
+    private var durationLabel: String? {
+        guard case let .active(config, _) = session.state else { return nil }
+        switch config.duration {
+        case .indefinite:        return "∞"
+        case .duration(let t):   return MenuBarLabel.durationText(t)
+        case .until(let date):   return MenuBarLabel.durationText(max(0, date.timeIntervalSinceNow))
+        }
+    }
+
+    /// 초 → "15m" / "1h" / "1h30m" 형태의 짧은 라벨.
+    static func durationText(_ seconds: TimeInterval) -> String {
+        let minutes = Int((seconds / 60).rounded())
+        if minutes < 60 { return "\(minutes)m" }
+        let h = minutes / 60, m = minutes % 60
+        return m == 0 ? "\(h)h" : "\(h)h\(m)m"
     }
 
     /// - active: 채워진 컵 + 주황(non-template, 색상 유지)
