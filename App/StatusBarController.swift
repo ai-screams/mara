@@ -55,16 +55,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         guard case let .active(config, _) = state else { return nil }
         switch config.duration {
         case .indefinite:      return "∞"
-        case .duration(let t): return Self.durationText(t)
-        case .until(let date): return Self.durationText(max(0, date.timeIntervalSinceNow))
+        case .duration(let t): return DurationFormat.compact(t)
+        case .until(let date): return DurationFormat.compact(max(0, date.timeIntervalSinceNow))
         }
-    }
-
-    static func durationText(_ seconds: TimeInterval) -> String {
-        let minutes = Int((seconds / 60).rounded())
-        if minutes < 60 { return "\(minutes)m" }
-        let h = minutes / 60, m = minutes % 60
-        return m == 0 ? "\(h)h" : "\(h)h\(m)m"
     }
 
     /// 활성: 뜬 눈(오렌지) / 비활성: 감은 눈(template — 메뉴바 톤 자동 적응).
