@@ -33,10 +33,12 @@ jobs:
           # 옮겨도(force-update) 승인된 커밋이 빌드된다. 태그 룰셋(protect-release-tags)과 이중 방어.
           ref: ${{ github.sha }}
 
-      - name: Assert tag has not moved since run creation
+      # 실제 TOCTOU 차단은 위의 ref 핀 + protect-release-tags 룰셋이 담당한다. 이 스텝은
+      # checkout 액션 오동작을 잡는 belt-and-suspenders일 뿐, 태그 이동 자체를 감지하지 못한다.
+      - name: Assert checked-out commit == run-creation commit
         run: |
           set -euo pipefail
-          [ "$(git rev-parse HEAD)" = "${{ github.sha }}" ] || { echo "::error::checked-out commit != run-creation commit (tag moved post-approval?)"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "${{ github.sha }}" ] || { echo "::error::checked-out commit != run-creation commit"; exit 1; }
           echo "✅ Building approved commit ${{ github.sha }}."
 
       - name: Select Xcode

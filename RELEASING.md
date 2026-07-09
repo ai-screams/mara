@@ -106,6 +106,17 @@ requires shipping a new `SUPublicEDKey` via a manually-downloaded release.
    release tags.
 4. Push a tag (`git tag vX.Y.Z && git push origin vX.Y.Z`) → approve the run when prompted.
 
+### Failed release recovery
+
+`v*` tags are protected by the `protect-release-tags` ruleset (no update/delete, no bypass), so a
+release that fails **after** its tag was pushed cannot reuse that tag. Recovery, in order of
+preference:
+
+1. **Bump to the next patch** (`vX.Y.Z+1`) and release again — burning a version number is cheap
+   and keeps the immutability guarantee intact.
+2. Break-glass only: temporarily disable the ruleset (**Settings → Rules → protect-release-tags**),
+   delete the tag, re-enable the ruleset. Avoid this unless the version number must be preserved.
+
 ## First-launch note for users
 
 The DMG opens Gatekeeper-clean (signed + notarized). Users drag **Mara** to Applications and launch
