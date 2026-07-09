@@ -178,15 +178,24 @@ rm -rf "$ICONSET"; mkdir -p "$ICONSET"
 cp "$ROOT_DIR/App/Assets.xcassets/AppIcon.appiconset/"icon_*.png "$ICONSET/" 2>/dev/null || true
 iconutil -c icns "$ICONSET" -o "$VOLICON" 2>/dev/null || VOLICON=""
 
+# DMG 창 배경(Night Watch 다크 + 설치 화살표). 좌표 계약은 scripts/dmg/generate-background.swift와
+# 일치: window 540×380, icon 100, 앱 (140,200) / Applications (400,200).
+# Retina 선명도: 1x+2x PNG를 hidpi multi-rep TIFF로 결합해 Finder가 화면 배율에 맞는 rep을
+# 고르게 한다(create-dmg는 @2x 파일을 자동 인식하지 않음). tiffutil은 Command Line Tools 포함.
+BG_SRC="$ROOT_DIR/scripts/dmg"
+BG="$BUILD_DIR/background.tiff"
+tiffutil -cathidpicheck "$BG_SRC/background.png" "$BG_SRC/background@2x.png" -out "$BG" >/dev/null
+
 if command -v create-dmg >/dev/null 2>&1; then
     # create-dmg는 성공해도 종료코드가 비정상일 때가 있어 가드한다.
     create-dmg \
         --volname "$APP_NAME" \
         ${VOLICON:+--volicon "$VOLICON"} \
-        --window-size 500 340 \
+        --background "$BG" \
+        --window-size 540 380 \
         --icon-size 100 \
-        --icon "$APP_NAME.app" 130 180 \
-        --app-drop-link 370 180 \
+        --icon "$APP_NAME.app" 140 200 \
+        --app-drop-link 400 200 \
         --no-internet-enable \
         "$DMG" "$STAGE" || true
 fi
