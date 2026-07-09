@@ -3,13 +3,23 @@
 ## Build & test
 
 - `xcodegen generate` 필수 선행 — `Mara.xcodeproj`는 생성물(gitignored). `make test|generate|build|release`.
+- 단일 테스트: `cd MaraCore && swift test --filter <TestName>`.
 - 로컬 스모크: Release 빌드 후 반드시 Apple Development 정체성으로 재서명(ad-hoc 금지, 글로벌 규칙).
+  정체성 조회: `security find-identity -v -p codesigning` (Apple Development 항목 사용).
   Sparkle 중첩 코드를 inside-out으로 먼저: Frameworks의 `*.xpc`/`Autoupdate` → `Sparkle.framework` → 앱 순.
 - 실행 교체 전 `pgrep -x Mara` 확인 → `osascript -e 'tell application "Mara" to quit'` → 교체 → `open`.
+
+## Architecture (배치 규칙)
+
+- 로직·결정은 `MaraCore/`(OS-free, 프로토콜 뒤, 테스트 가능) — App은 얇은 AppKit 셸. 의존 방향은 App→Core 단방향만.
+- OS 어댑터 추가 시: Core에 프로토콜 정의 → App(`AppEnvironment`)에서 인스턴스화 주입 (기존 Battery/Screen/Apps/Network 패턴).
+- `@Published`는 willSet 발화 — sink에서 재-read 금지, 방출값을 그대로 사용 (기존 코드 주석 참조).
 
 ## Release (CI가 정본)
 
 - 태그 푸시(vX.Y.Z) → 보호된 `release` 환경. 승인: UI 또는 `gh api repos/…/actions/runs/<id>/pending_deployments`.
+- 버전 정본은 git 태그: release.sh가 MARKETING_VERSION을 태그로 덮어씀(project.yml 값은 dev 전용).
+  CFBundleVersion = git 커밋 수(단조 증가) — 커밋 없이 연속 태그 금지.
 - v* 태그는 룰셋으로 불변 — 실패한 릴리스는 태그 재사용 불가, 패치 범프로 복구(RELEASING.md).
 - **검증은 게시된 산출물로**: `gh release download` → spctl/stapler/appcast/`.background` 확인.
   로컬 재현 검증은 이 리포에서 두 번 틀렸다(메뉴바 오렌지, DMG 배경).
