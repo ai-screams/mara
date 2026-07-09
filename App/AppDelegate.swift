@@ -16,12 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private lazy var statusBar = StatusBarController(env: env)
-    private lazy var settingsPresenter = SettingsWindowPresenter { [env, updaterController] in
+    private lazy var settingsPresenter = SettingsWindowPresenter { [env, updaterController, notificationService] in
         SettingsView(
             prefs: env.prefs,
             session: env.session,
             currentNetwork: { env.currentNetwork },
-            checkForUpdates: { updaterController.checkForUpdates(nil) }
+            checkForUpdates: { updaterController.checkForUpdates(nil) },
+            requestNotificationAuth: { await notificationService.requestAuthorization() }
         )
     }
     private let notificationService = NotificationService()
