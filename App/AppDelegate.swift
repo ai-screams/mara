@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             checkForUpdates: { updaterController.checkForUpdates(nil) }
         )
     }
+    private let notificationService = NotificationService()
+    private var sessionNotifier: SessionNotifier?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -33,5 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(SPUStandardUpdaterController.checkForUpdates(_:))
         )
         statusBar.install()
+        sessionNotifier = SessionNotifier(
+            session: env.session,
+            isEnabled: { [env] in env.prefs.notifyAutoSessionChanges },
+            service: notificationService
+        )
     }
 }
