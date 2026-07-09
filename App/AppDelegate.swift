@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import MaraCore
+import Sparkle
 
 /// 메뉴바 상주 앱의 AppKit 진입점. NSStatusItem으로 눈 아이콘을 띄우고, 네이티브 NSMenu로
 /// 세션을 조작하며, 설정 창은 기존 SwiftUI `SettingsView`를 NSHostingController로 호스팅한다.
@@ -11,6 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
+
+    /// Sparkle 자동 업데이트. startingUpdater: true → 피드(appcast) 주기 확인을 즉시 시작하고,
+    /// 자동 확인 동의는 Sparkle 표준(둘째 실행 시 프롬프트)에 맡긴다. "Check for Updates…"
+    /// 메뉴 항목의 타깃이 되며 canCheckForUpdates에 따라 자동 활성/비활성된다.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -107,6 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.state = LaunchAtLogin.isEnabled ? .on : .off
 
         menu.addItem(.separator())
+
+        // addItem 헬퍼는 target=self 고정이라 직접 생성 — 타깃이 updaterController여야
+        // Sparkle이 canCheckForUpdates로 활성/비활성을 자동 관리한다.
+        let update = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        update.target = updaterController
+        menu.addItem(update)
+
         addItem(to: menu, title: "Settings…", action: #selector(openSettings), key: ",")
         addItem(to: menu, title: "Quit Mara", action: #selector(quit), key: "q")
     }

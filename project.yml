@@ -7,6 +7,10 @@ options:
 packages:
   MaraCore:
     path: MaraCore
+  # Package.resolved를 커밋하지 않는 리포이므로 exactVersion이 공급망 핀 역할을 한다.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.3
 targets:
   Mara:
     type: application
@@ -14,6 +18,7 @@ targets:
     sources: [App]
     dependencies:
       - package: MaraCore
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aiscream.Mara
