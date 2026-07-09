@@ -22,12 +22,17 @@ final class PrefsStore: ObservableObject {
     @Published var notifyAutoSessionChanges: Bool {
         didSet { UserDefaults.standard.set(notifyAutoSessionChanges, forKey: Keys.notifyAutoSessionChanges) }
     }
+    /// 커스텀 타이머 최근 사용값(초), 최신순 최대 3개. Until(절대시각)은 기록하지 않는다.
+    @Published var recentCustomDurations: [TimeInterval] {
+        didSet { UserDefaults.standard.set(recentCustomDurations, forKey: Keys.recentCustomDurations) }
+    }
     var defaultScope: KeepAwakeScope { KeepAwakeScope(keepDisplay: defaultKeepDisplayAwake) }
     private enum Keys {
         static let defaultKeepDisplayAwake = "defaultKeepDisplayAwake"
         static let lowBatteryThreshold = "lowBatteryThreshold"
         static let triggerConfig = "triggerConfig"
         static let notifyAutoSessionChanges = "notifyAutoSessionChanges"
+        static let recentCustomDurations = "recentCustomDurations"
     }
     init() {
         let d = UserDefaults.standard
@@ -35,15 +40,23 @@ final class PrefsStore: ObservableObject {
             Keys.defaultKeepDisplayAwake: true,
             Keys.lowBatteryThreshold: 20,
             Keys.notifyAutoSessionChanges: false,
+            Keys.recentCustomDurations: [TimeInterval](),
         ])
         defaultKeepDisplayAwake = d.bool(forKey: Keys.defaultKeepDisplayAwake)
         lowBatteryThreshold = d.integer(forKey: Keys.lowBatteryThreshold)
         notifyAutoSessionChanges = d.bool(forKey: Keys.notifyAutoSessionChanges)
+        recentCustomDurations = (d.array(forKey: Keys.recentCustomDurations) as? [TimeInterval]) ?? []
         if let data = d.data(forKey: Keys.triggerConfig),
            let cfg = try? JSONDecoder().decode(TriggerConfig.self, from: data) {
             triggerConfig = cfg
         } else {
             triggerConfig = .defaults
         }
+    }
+    /// MRU 갱신: 같은 값은 앞으로 끌어올리고, 3개 초과분은 버린다.
+    func rememberCustomDuration(_ seconds: TimeInterval) {
+        var list = recentCustomDurations.filter { $0 != seconds }
+        list.insert(seconds, at: 0)
+        recentCustomDurations = Array(list.prefix(3))
     }
 }
