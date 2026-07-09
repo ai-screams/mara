@@ -46,6 +46,7 @@ struct CustomKeepAwakeView: View {
                     }
                     // 최대 24h — 24h에서 분을 얹지 못하게 클램프
                     .onChange(of: hours) { _, h in if h == 24 { minutes = 0 } }
+                    .onChange(of: minutes) { _, m in if hours == 24 && m > 0 { minutes = 0 } }   // 24h에서 분 직접 증가도 차단
                     Text(durationSeconds > 0 ? "Keeps your Mac awake for \(DurationFormat.compact(durationSeconds))." : "Pick a duration.")
                         .font(.caption).foregroundStyle(MaraTheme.muted)
                 } else {
