@@ -1,0 +1,26 @@
+# Mara — Claude Code notes
+
+## Build & test
+
+- `xcodegen generate` 필수 선행 — `Mara.xcodeproj`는 생성물(gitignored). `make test|generate|build|release`.
+- 로컬 스모크: Release 빌드 후 반드시 Apple Development 정체성으로 재서명(ad-hoc 금지, 글로벌 규칙).
+  Sparkle 중첩 코드를 inside-out으로 먼저: Frameworks의 `*.xpc`/`Autoupdate` → `Sparkle.framework` → 앱 순.
+- 실행 교체 전 `pgrep -x Mara` 확인 → `osascript -e 'tell application "Mara" to quit'` → 교체 → `open`.
+
+## Release (CI가 정본)
+
+- 태그 푸시(vX.Y.Z) → 보호된 `release` 환경. 승인: UI 또는 `gh api repos/…/actions/runs/<id>/pending_deployments`.
+- v* 태그는 룰셋으로 불변 — 실패한 릴리스는 태그 재사용 불가, 패치 범프로 복구(RELEASING.md).
+- **검증은 게시된 산출물로**: `gh release download` → spctl/stapler/appcast/`.background` 확인.
+  로컬 재현 검증은 이 리포에서 두 번 틀렸다(메뉴바 오렌지, DMG 배경).
+- `scripts/release.sh`는 **zsh**: `${VAR:+--flag "$VAR"}`는 단어 분리 안 됨 — 인자는 배열로 구성.
+- 로컬 공증: 암호를 argv에 넣지 말 것 — `NOTARY_PROFILE=mara-notary`(Keychain 프로필) 사용.
+
+## macOS 26 menu-bar quirks (상세는 auto-memory·코드 주석)
+
+- 렌더 확인의 ground truth는 사용자 스크린샷/occlusionState — API 값(isVisible, tint)은 거짓말한다.
+
+## Conventions
+
+- UI 문자열은 영어. 주석은 한국어(메모리 안전/네트워크 파서 계열은 영어).
+- 백로그는 `.docs/BACKLOG.md` (.docs는 절대 커밋 금지 — 글로벌 규칙과 동일). 스펙/플랜도 `.docs/`.
