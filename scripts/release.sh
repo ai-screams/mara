@@ -121,16 +121,20 @@ xcodebuild -exportArchive \
     | tail -3
 [[ -d "$APP" ]] || die "export 실패: $APP 없음"
 
-# 방어: MaraCore는 정적 링크라 내장 프레임워크가 없다(app-only 서명 가정). 동적 의존성이
-# 추가돼 Contents/Frameworks가 생기면 inside-out 서명이 필요하므로 여기서 크게 실패시킨다.
-[[ -d "$APP/Contents/Frameworks" ]] \
-    && die "Contents/Frameworks 감지 — 동적 의존성 추가됨. inside-out 서명 필요(app-only 가정 위반)."
-
 # ── 4) 서명/Hardened Runtime 검증 ────────────────────────────────────────────
-print "▸ [3/6] 서명 검증…"
-codesign --verify --strict --verbose=2 "$APP"
+# Sparkle 등 내장 프레임워크(Contents/Frameworks)는 exportArchive(developer-id)가
+# inside-out으로 재서명한다(Azimuth에서 검증된 경로). 여기서는 중첩 코드까지 --deep으로
+# 검증해 서명 누락을 공증 전에 잡는다 — 미서명/타 주체 중첩 코드는 여기서 하드 실패.
+print "▸ [3/6] 서명 검증 (deep)…"
+codesign --verify --deep --strict --verbose=2 "$APP"
 codesign -dvvv "$APP" 2>&1 | grep -iE "^Authority=Developer ID|runtime" >/dev/null \
     || die "Developer ID/Hardened Runtime 확인 실패 — 인증서를 점검하라"
+if [[ -d "$APP/Contents/Frameworks" ]]; then
+    while IFS= read -r -d '' nested; do
+        codesign -dv "$nested" 2>&1 | grep -q "TeamIdentifier=$DEVELOPMENT_TEAM" \
+            || die "중첩 코드 서명 주체 불일치: $nested"
+    done < <(find "$APP/Contents/Frameworks" -mindepth 1 -maxdepth 1 -print0)
+fi
 
 # ── 공증 헬퍼 (자격: NOTARY_PROFILE 또는 APPLE_ID+APP_PASSWORD) ────────────────
 # 실패 시 notary 로그를 덤프해 디버깅 가능하게 한다.
