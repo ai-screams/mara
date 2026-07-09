@@ -46,9 +46,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private func refreshStatusButton(_ state: SessionState) {
         guard let button = statusItem?.button else { return }
         button.image = Self.statusIcon(active: state.isActive)
-        // 색은 contentTintColor로 입힌다 — 팔레트 컬러 non-template 이미지는 메뉴바에서
-        // 단색으로 렌더된다(macOS 26 관측). template + tint가 정석이고 다크/라이트에도 안전.
-        button.contentTintColor = state.isActive ? .systemOrange : nil
         button.imagePosition = .imageLeading
         button.title = durationLabel(for: state).map { " " + $0 } ?? ""
     }
@@ -70,14 +67,27 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         return m == 0 ? "\(h)h" : "\(h)h\(m)m"
     }
 
-    /// 활성: 뜬 눈 / 비활성: 감은 눈. 둘 다 template — 색은 refreshStatusButton의
-    /// contentTintColor가 입힌다(활성=오렌지, 비활성=메뉴바 톤 자동 적응).
+    /// 활성: 뜬 눈(오렌지) / 비활성: 감은 눈(template — 메뉴바 톤 자동 적응).
+    /// 오렌지는 비트맵에 직접 굽는다(sourceAtop + non-template). NSStatusBarButton은
+    /// contentTintColor를 무시하고, template 이미지·팔레트 심볼 구성도 단색으로 렌더한다
+    /// (macOS 26 실기 관측 — 스크린샷으로 확인된 사실).
     static func statusIcon(active: Bool) -> NSImage {
-        let symbol = active ? MaraSymbol.awake : MaraSymbol.resting
         let description = active ? "Mara — keep-awake active" : "Mara — inactive"
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description) ?? NSImage()
-        image.isTemplate = true
-        return image
+        let symbol = active ? MaraSymbol.awake : MaraSymbol.resting
+        let base = NSImage(systemSymbolName: symbol, accessibilityDescription: description) ?? NSImage()
+        guard active else {
+            base.isTemplate = true
+            return base
+        }
+        let tinted = NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            NSColor.systemOrange.set()
+            rect.fill(using: .sourceAtop)   // 글리프 알파 위에만 색을 얹는다
+            return true
+        }
+        tinted.isTemplate = false           // 구운 색 그대로 렌더
+        tinted.accessibilityDescription = description
+        return tinted
     }
 
     // MARK: - Menu (rebuilt on open for live state)
