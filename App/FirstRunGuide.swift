@@ -77,13 +77,14 @@ struct FirstRunGuideView: View {
 /// LSUIElement 앱에서 .transient의 바깥 클릭 dismiss는 앱이 활성일 때만 동작하므로
 /// 표시 직전 activate하고, 명시적 "Got it" 버튼을 항상 제공한다.
 @MainActor
-final class FirstRunGuidePresenter {
+final class FirstRunGuidePresenter: NSObject, NSPopoverDelegate {
     private var popover: NSPopover?
 
     func show(relativeTo button: NSStatusBarButton) {
         let pop = NSPopover()
         pop.behavior = .transient
         pop.appearance = NSAppearance(named: .darkAqua)
+        pop.delegate = self
         pop.contentViewController = NSHostingController(
             rootView: FirstRunGuideView(onDone: { [weak self] in self?.dismiss() })
         )
@@ -93,7 +94,12 @@ final class FirstRunGuidePresenter {
     }
 
     private func dismiss() {
-        popover?.performClose(nil)
+        popover?.performClose(nil)   // 해제는 popoverDidClose가 담당 (바깥 클릭 닫힘과 경로 통일)
+    }
+
+    // 닫힘 경로가 둘(Got it / transient 바깥 클릭)이라 delegate에서 한 번에 해제한다 —
+    // 닫힌 팝오버가 앱 수명 동안 리테인되는 것 방지.
+    func popoverDidClose(_ notification: Notification) {
         popover = nil
     }
 }
