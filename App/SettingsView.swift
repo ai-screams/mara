@@ -228,8 +228,13 @@ struct SettingsView: View {
             if matched.count == 1, let id = matched.first {
                 return (active, "Active — \(id) running")
             }
-            return (active, active ? "Active — \(matched.count) watched apps running"
-                                   : "Inactive — no watched app running")
+            if active {
+                return (true, "Active — \(matched.count) watched apps running")
+            }
+            // 감시 개수를 함께 표기 — "목록은 인식됐는데 매칭이 없다"를 알려
+            // 사용자가 오타 가능성 vs 앱 미실행으로 가설을 좁힐 수 있게 한다.
+            let watched = config.watchedBundleIDs.count
+            return (false, "Inactive — \(watched) \(watched == 1 ? "app" : "apps") watched, none running")
         case .network(let current, let matched):
             guard let current else { return (active, "Inactive — can't resolve gateway") }
             return (active, matched ? "Active — \(current.gatewayMAC)"
