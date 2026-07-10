@@ -10,6 +10,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let env: AppEnvironment
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
+    /// 카운트다운 갱신 타이머. sink가 세션 변화마다 재설정하며,
+    /// 만료는 SessionManager 타이머가 stop → sink 경유로 invalidate된다.
+    private var countdownTimer: Timer?
 
     /// Settings 창 열기 — 창 소유자(AppDelegate)가 주입.
     var onOpenSettings: (() -> Void)?
@@ -33,6 +36,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.delegate = self          // 열릴 때마다 menuNeedsUpdate로 라이브 상태 반영
         item.menu = menu
         statusItem = item
+        // 숫자 폭 흔들림 방지: 모노스페이스 숫자 폰트로 라벨 너비를 안정화한다.
+        item.button?.font = NSFont.monospacedDigitSystemFont(
+            ofSize: NSFont.systemFontSize(for: .small), weight: .regular)
         refreshStatusButton(env.session.state)
         item.isVisible = true         // 콘텐츠를 채운 뒤 마지막에 표시(기본값이 항상 true가 아님)
 
@@ -43,23 +49,39 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             .store(in: &cancellables)
     }
 
-    // MARK: - Status button (eye icon + duration)
+    // MARK: - Status button (eye icon + countdown)
 
     private func refreshStatusButton(_ state: SessionState) {
+        // 항상 기존 카운트다운 타이머를 먼저 취소한다.
+        // sink가 세션 변화마다 재설정하며, 만료는 SessionManager 타이머가 stop → sink 경유로 invalidate된다.
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+
         guard let button = statusItem?.button else { return }
         button.image = Self.statusIcon(active: state.isActive)
         button.imagePosition = .imageLeading
         button.title = durationLabel(for: state).map { " " + $0 } ?? ""
+
+        // expiresAt이 있는 활성 세션: 다음 라벨 전환 시각에 non-repeating 타이머를 건다.
+        if case let .active(_, expiresAt) = state, let expiry = expiresAt {
+            let remaining = expiry.timeIntervalSinceNow
+            let interval = CountdownFormat.nextTick(remaining: remaining)
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                // 발화 시 현재 state를 다시 읽어 최신 상태로 재귀 예약한다.
+                MainActor.assumeIsolated { self.refreshStatusButton(self.env.session.state) }
+            }
+            timer.tolerance = 1.0   // 에너지 배려: 1초 오차 허용
+            RunLoop.main.add(timer, forMode: .common)
+            countdownTimer = timer
+        }
     }
 
-    /// 활성 세션의 지속시간 라벨(15m / 1h / ∞). 비활성이면 nil.
+    /// 활성 세션의 라벨: expiresAt 기반 카운트다운(4h55m → … → 1m) 또는 무한(∞). 비활성이면 nil.
     private func durationLabel(for state: SessionState) -> String? {
-        guard case let .active(config, _) = state else { return nil }
-        switch config.duration {
-        case .indefinite:      return "∞"
-        case .duration(let t): return DurationFormat.compact(t)
-        case .until(let date): return DurationFormat.compact(max(0, date.timeIntervalSinceNow))
-        }
+        guard case let .active(_, expiresAt) = state else { return nil }
+        guard let expiry = expiresAt else { return "∞" }
+        return CountdownFormat.label(remaining: expiry.timeIntervalSinceNow)
     }
 
     /// 활성: 뜬 눈(오렌지) / 비활성: 감은 눈(template — 메뉴바 톤 자동 적응).
