@@ -1,17 +1,24 @@
 import Combine
 
 @MainActor
-public final class TriggerEngine {
+public final class TriggerEngine: ObservableObject {
     private let session: SessionManager
     private let scope: () -> KeepAwakeScope
 
-    // kind별 활성 평가기와 그 구독 (재조정 대상)
-    private var active: [TriggerKind: (evaluator: TriggerEvaluator, cancellable: AnyCancellable)] = [:]
+    // kind별 활성 평가기와 그 구독 (재조정 대상). diagnostics는 TriggerDiagnosing 채택 시에만.
+    private var active: [TriggerKind: (evaluator: TriggerEvaluator,
+                                       cancellable: AnyCancellable,
+                                       diagnostics: AnyCancellable?)] = [:]
     private var sessionCancellable: AnyCancellable?
-    private var suppressed = false
+    private var suppressed = false {
+        didSet { if suppressed != oldValue { refreshSnapshot() } }
+    }
     private var lastActive = false
-    // 재조정 중 중간 reevaluate() 호출을 막는 플래그
+    // 재조정 중 중간 reevaluate()/refreshSnapshot() 호출을 막는 플래그
     private var reconciling = false
+
+    /// 진단 스냅샷 — Settings 진단 패널이 구독하는 read-only 상태. 변이 API는 없다.
+    @Published public private(set) var snapshot: TriggerEngineSnapshot = .empty
 
     public init(session: SessionManager, scope: @escaping () -> KeepAwakeScope) {
         self.session = session
@@ -41,19 +48,30 @@ public final class TriggerEngine {
             let c = evaluator.satisfied.sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.reevaluate() }
             }
-            active[kind] = (evaluator, c)
+            // 진단 상세 변화(satisfied Bool로는 안 잡히는 화면 수·매칭 앱 변화) → 스냅샷 갱신.
+            // 어댑터 publisher는 CurrentValueSubject 파생(didSet)이라 sink에서 현재값 재-read가 안전
+            // (@Published willSet 규칙과 다른 케이스). 구독 시 동기 replay는 reconciling 가드가 흡수.
+            let d = (evaluator as? TriggerDiagnosing)?.diagnostics.sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshSnapshot() }
+            }
+            active[kind] = (evaluator, c, d)
         }
         reconciling = false
-        reevaluate()   // 재조정 완료 후 딱 한 번만 평가
+        // 재조정 완료 후 딱 한 번만 평가 — 스냅샷 갱신은 reevaluate()의 defer가 담당한다.
+        reevaluate()
     }
 
     public func stop() {
         active.removeAll()
         sessionCancellable = nil
+        // 트리거가 전부 사라졌으므로 suppression도 해제 — "모든 트리거 해제 시 재무장" 정의와 일관,
+        // 스냅샷이 (triggers: [], isSuppressed: true)로 남는 어정쩡한 상태를 막는다.
+        suppressed = false
         // trigger-origin 세션이 활성이면 함께 종료 (orphan 방지)
         if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
             session.stop(reason: .triggerCleared)
         }
+        refreshSnapshot()
     }
 
     private func handleSessionChange(_ state: SessionState) {
@@ -67,6 +85,7 @@ public final class TriggerEngine {
 
     private func reevaluate() {
         guard !reconciling else { return }   // 재조정 중 중간 호출 → no-op
+        defer { refreshSnapshot() }          // satisfied 변화도 스냅샷에 반영
         guard isAnySatisfied else {
             suppressed = false   // 모든 트리거 false → 재무장
             if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
@@ -79,5 +98,18 @@ public final class TriggerEngine {
             session.start(SessionConfig(scope: scope(), duration: .indefinite, origin: .trigger))
         }
         // 이미 활성(수동 포함)이면 no-op — 수동 > 트리거
+    }
+
+    /// active 목록·만족 여부·진단·suppression으로 스냅샷 재구성. 동일 값이면 발행하지 않는다.
+    private func refreshSnapshot() {
+        guard !reconciling else { return }   // 부분 재조정 상태의 중간 스냅샷 발행 금지
+        let triggers = TriggerKind.allCases.compactMap { kind -> TriggerSnapshot? in
+            guard let entry = active[kind] else { return nil }
+            return TriggerSnapshot(kind: kind,
+                                   isSatisfied: entry.evaluator.isSatisfied,
+                                   diagnostic: (entry.evaluator as? TriggerDiagnosing)?.diagnostic)
+        }
+        let next = TriggerEngineSnapshot(triggers: triggers, isSuppressed: suppressed)
+        if next != snapshot { snapshot = next }
     }
 }
