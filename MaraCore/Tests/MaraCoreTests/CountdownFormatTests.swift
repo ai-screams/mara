@@ -3,47 +3,51 @@ import XCTest
 
 final class CountdownFormatTests: XCTestCase {
 
-    // MARK: - label: 올림(ceiling) 의미론
+    // MARK: - label: 정확한 남은 시간(분 반올림) — 올림 아님
 
     func testLabel_exactBoundary5h() {
-        // 정확 경계: 18000초 → g=300(coarse), ceil(18000/300)=60 → 60*300=18000 → "5h"
+        // 정확 경계: 18000초 → compact(18000) = 300분 → "5h"
         XCTAssertEqual(CountdownFormat.label(remaining: 5 * 3600), "5h")
     }
 
     func testLabel_justAfterBoundary5h() {
-        // 경계 직후에도 5h 유지: 4h59m59s = 17999초 → ceil(17999/300)=60 → 18000 → "5h"
+        // 경계 직후: 4h59m59s = 17999초 → 분 반올림 = 300분 → "5h" (틱 사이 오차는 반올림이 흡수)
         XCTAssertEqual(CountdownFormat.label(remaining: 4 * 3600 + 59 * 60 + 59), "5h")
     }
 
     func testLabel_next5minBoundary() {
-        // 4h55m 경계 도달 순간: 4h55m = 17700초 → ceil(17700/300)=59 → 17700 → "4h55m"
+        // 4h55m 경계: 17700초 → 295분 → "4h55m"
         XCTAssertEqual(CountdownFormat.label(remaining: 4 * 3600 + 55 * 60), "4h55m")
     }
 
-    func testLabel_6min_coarseRoundup() {
-        // 6분(360초) → 360>300 → g=300 → ceil(360/300)=2 → 600 → "10m"
-        // 올림 의미론: 5m~10m 구간에서는 "10m"이 표시된다(UX가 다소 거칠지만 명세상 올바름)
-        XCTAssertEqual(CountdownFormat.label(remaining: 6 * 60), "10m")
+    func testLabel_6min_exact() {
+        // 정확 라벨: 6분은 "6m" — 올림("10m")이었다면 5분 배수가 아닌 세션이 과대 표시된다
+        XCTAssertEqual(CountdownFormat.label(remaining: 6 * 60), "6m")
+    }
+
+    func testLabel_47min_honestStart() {
+        // 커스텀 47m 세션 시작 직후: "47m" (과대 표시 없음). 이후 틱은 45m 경계에 정렬된다.
+        XCTAssertEqual(CountdownFormat.label(remaining: 47 * 60), "47m")
     }
 
     func testLabel_exactBoundary5m() {
-        // 경계: 300초 → 300>300 false → g=60(fine) → ceil(300/60)=5 → 300 → "5m"
+        // 300초 → 5분 → "5m"
         XCTAssertEqual(CountdownFormat.label(remaining: 5 * 60), "5m")
     }
 
-    func testLabel_4min30sec_fineRoundup() {
-        // ≤5m → fine 단위: 4m30s = 270초 → g=60 → ceil(270/60)=5 → 300 → "5m"
+    func testLabel_4min30sec_roundsToNearest() {
+        // 분 반올림: 4m30s = 270초 → round(4.5) = 5 → "5m"
         XCTAssertEqual(CountdownFormat.label(remaining: 4 * 60 + 30), "5m")
     }
 
     func testLabel_3min_fine() {
-        // 3분(180초) → g=60 → ceil(180/60)=3 → 180 → "3m"
         XCTAssertEqual(CountdownFormat.label(remaining: 3 * 60), "3m")
     }
 
-    func testLabel_59sec_fineRoundup() {
-        // 59초 → g=60 → ceil(59/60)=1 → 60 → "1m"
+    func testLabel_subMinute_floorsAtOneMinute() {
+        // 활성 세션의 마지막 1분은 "0m" 대신 "1m" 바닥 처리 (만료 알림은 SessionManager 몫)
         XCTAssertEqual(CountdownFormat.label(remaining: 59), "1m")
+        XCTAssertEqual(CountdownFormat.label(remaining: 29), "1m")
     }
 
     func testLabel_zero() {
