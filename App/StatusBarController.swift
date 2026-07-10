@@ -107,6 +107,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // 서브메뉴도 메인 메뉴와 같은 디자인 언어: 전 항목 SF Symbol + "Recent" 섹션 헤더.
         let durMenu = NSMenu()
         durMenu.addItem(durationItem("15 minutes", 15 * 60))
         durMenu.addItem(durationItem("1 hour", 60 * 60))
@@ -115,16 +116,20 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         // 최근 커스텀 duration(MRU 최대 3) — 원클릭 재사용. Until은 기록되지 않는다.
         if !env.prefs.recentCustomDurations.isEmpty {
             durMenu.addItem(.separator())
+            durMenu.addItem(.sectionHeader(title: "Recent"))
             for seconds in env.prefs.recentCustomDurations {
-                durMenu.addItem(durationItem(DurationFormat.compact(seconds), seconds))
+                durMenu.addItem(durationItem(DurationFormat.compact(seconds), seconds,
+                                             symbol: "clock.arrow.circlepath"))
             }
             let clear = NSMenuItem(title: "Clear Recent", action: #selector(clearRecentDurations), keyEquivalent: "")
             clear.target = self
+            clear.image = Self.menuSymbol("xmark.circle")
             durMenu.addItem(clear)
         }
         durMenu.addItem(.separator())
         let custom = NSMenuItem(title: "Custom…", action: #selector(openCustomKeepAwake), keyEquivalent: "")
         custom.target = self
+        custom.image = Self.menuSymbol("slider.horizontal.3")
         durMenu.addItem(custom)
         let durParent = NSMenuItem(title: "Keep awake for…", action: nil, keyEquivalent: "")
         durParent.image = Self.menuSymbol("timer")
@@ -169,10 +174,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)
     }
 
-    private func durationItem(_ title: String, _ seconds: TimeInterval) -> NSMenuItem {
+    private func durationItem(_ title: String, _ seconds: TimeInterval,
+                              symbol: String = "clock") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(startTimed(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = seconds
+        item.image = Self.menuSymbol(symbol)
         return item
     }
 
