@@ -57,6 +57,7 @@ final class PrefsStore: ObservableObject {
     }
     /// MRU 갱신: 같은 값은 앞으로 끌어올리고, 3개 초과분은 버린다.
     func rememberCustomDuration(_ seconds: TimeInterval) {
+        guard seconds.isFinite && seconds > 0 else { return }   // 쓰기 경로도 가드 — 로드 필터와 대칭(2계층 완결)
         var list = recentCustomDurations.filter { $0 != seconds }
         list.insert(seconds, at: 0)
         recentCustomDurations = Array(list.prefix(3))

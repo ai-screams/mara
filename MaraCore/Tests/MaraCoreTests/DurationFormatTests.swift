@@ -29,5 +29,6 @@ final class DurationFormatTests: XCTestCase {
         XCTAssertEqual(DurationFormat.compact(.infinity), "0m")
         XCTAssertEqual(DurationFormat.compact(-600), "0m")
         XCTAssertEqual(DurationFormat.compact(1e30), "24h")   // 상한 클램프
+        XCTAssertEqual(DurationFormat.compact(0), "0m")       // 클램프 하한 경계
     }
 }
