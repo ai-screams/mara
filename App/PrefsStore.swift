@@ -45,7 +45,9 @@ final class PrefsStore: ObservableObject {
         defaultKeepDisplayAwake = d.bool(forKey: Keys.defaultKeepDisplayAwake)
         lowBatteryThreshold = d.integer(forKey: Keys.lowBatteryThreshold)
         notifyAutoSessionChanges = d.bool(forKey: Keys.notifyAutoSessionChanges)
-        recentCustomDurations = (d.array(forKey: Keys.recentCustomDurations) as? [TimeInterval]) ?? []
+        // 신뢰 경계: plist는 외부에서 조작될 수 있다 — 비유한·비양수 값과 초과 길이를 로드 시 걸러낸다.
+        let loaded = (d.array(forKey: Keys.recentCustomDurations) as? [TimeInterval]) ?? []
+        recentCustomDurations = Array(loaded.filter { $0.isFinite && $0 > 0 }.prefix(3))
         if let data = d.data(forKey: Keys.triggerConfig),
            let cfg = try? JSONDecoder().decode(TriggerConfig.self, from: data) {
             triggerConfig = cfg

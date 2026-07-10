@@ -24,4 +24,10 @@ final class DurationFormatTests: XCTestCase {
     func test_boundary_59point5MinutesRoundsToOneHour() {
         XCTAssertEqual(DurationFormat.compact(59.5 * 60), "1h")   // 60분으로 반올림 → "1h"
     }
+    func test_hostileInputs_degradeSafely() {
+        XCTAssertEqual(DurationFormat.compact(.nan), "0m")
+        XCTAssertEqual(DurationFormat.compact(.infinity), "0m")
+        XCTAssertEqual(DurationFormat.compact(-600), "0m")
+        XCTAssertEqual(DurationFormat.compact(1e30), "24h")   // 상한 클램프
+    }
 }
