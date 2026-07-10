@@ -120,4 +120,19 @@ final class TriggerEngineSnapshotTests: XCTestCase {
         t.set(satisfied: true)                     // 재무장 후 재충족 → 재시작
         XCTAssertTrue(sm.state.isActive)
     }
+
+    // stop()은 트리거를 전부 제거하므로 suppression도 해제되어 스냅샷이 .empty여야 한다
+    // (M1: (triggers: [], isSuppressed: true)로 남는 상태 방지).
+    func test_stopWhileSuppressed_clearsSuppressionInSnapshot() {
+        let sm = makeSession()
+        let engine = TriggerEngine(session: sm, scope: { .systemOnly })
+        let t = MockDiagnosingTrigger(kind: .charging, satisfied: true,
+                                      diagnostic: .charging(onAC: true))
+        engine.updateEvaluators([t])
+        XCTAssertTrue(sm.state.isActive)
+        sm.stop()                                  // 수동 OFF → suppressed
+        XCTAssertTrue(engine.snapshot.isSuppressed)
+        engine.stop()
+        XCTAssertEqual(engine.snapshot, .empty)
+    }
 }

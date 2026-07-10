@@ -64,6 +64,9 @@ public final class TriggerEngine: ObservableObject {
     public func stop() {
         active.removeAll()
         sessionCancellable = nil
+        // 트리거가 전부 사라졌으므로 suppression도 해제 — "모든 트리거 해제 시 재무장" 정의와 일관,
+        // 스냅샷이 (triggers: [], isSuppressed: true)로 남는 어정쩡한 상태를 막는다.
+        suppressed = false
         // trigger-origin 세션이 활성이면 함께 종료 (orphan 방지)
         if case let .active(cfg, _) = session.state, cfg.origin == .trigger {
             session.stop(reason: .triggerCleared)
