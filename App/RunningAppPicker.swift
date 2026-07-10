@@ -19,6 +19,7 @@ enum RunningAppSnapshot {
             .filter { $0.activationPolicy != .prohibited }
             .compactMap { app -> (item: RunningAppItem, regular: Bool)? in
                 guard let id = app.bundleIdentifier,
+                      id != Bundle.main.bundleIdentifier,   // 자기 자신 제외 — "Mara 실행 중" 트리거는 항상-참이라 무의미
                       !watched.contains(id),
                       seen.insert(id).inserted else { return nil }
                 return (RunningAppItem(id: id, name: app.localizedName ?? id, icon: app.icon),
@@ -35,7 +36,9 @@ enum RunningAppSnapshot {
 /// Night Watch 스타일 실행 앱 피커 시트. 행 클릭 → 추가(onAdd), 추가된 행은 체크로 남는다.
 struct RunningAppPickerView: View {
     let apps: [RunningAppItem]
-    let onAdd: (String) -> Void
+    /// 실제 추가 성공 여부를 반환해야 한다 — 체크마크는 성공에만 게이트된다
+    /// (검증 실패가 체크로 표시되는 거짓 성공 방지, Codex 감사 High 반영).
+    let onAdd: (String) -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var added: Set<String> = []
 
@@ -74,8 +77,7 @@ struct RunningAppPickerView: View {
     private func appRow(_ app: RunningAppItem) -> some View {
         let isAdded = added.contains(app.id)
         Button {
-            added.insert(app.id)
-            onAdd(app.id)
+            if onAdd(app.id) { added.insert(app.id) }
         } label: {
             HStack(spacing: 9) {
                 if let icon = app.icon {
