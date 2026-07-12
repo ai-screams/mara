@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // add(dependency:)는 인자를 @autoclosure @escaping으로 받음 — 클래스 내부라 self 명시 필요.
         AppDependencyManager.shared.add(dependency: self.env.sessionCommander)
         NSApp.setActivationPolicy(.accessory)
+        // accessory 앱엔 기본 메인 메뉴가 없어 창의 Cmd+W·텍스트 편집 단축키가 안 걸린다 — 최소 표준 메뉴 설치.
+        MainMenu.install(appName: "Mara")
         statusBar.onOpenSettings = { [weak self] in self?.settingsPresenter.show() }
         statusBar.onOpenCustomKeepAwake = { [weak self] in self?.customKeepAwakePresenter.show() }
         statusBar.checkForUpdates = (
