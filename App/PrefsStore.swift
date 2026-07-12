@@ -68,8 +68,11 @@ final class PrefsStore: ObservableObject {
     }
 
     /// MRU 갱신: 같은 값은 앞으로 끌어올리고, 3개 초과분은 버린다.
-    /// 순수 로직(중복 제거·cap·비유한 가드)은 Core `CustomDurationMRU.inserting`이 담당(테스트됨).
+    /// 순수 로직(중복 제거·cap)은 Core `CustomDurationMRU.inserting`이 담당(테스트됨).
+    /// 무효 입력은 여기서 완전 no-op으로 조기 반환한다 — 같은 값 재대입 시 @Published/didSet이
+    /// 재발화해 UserDefaults를 불필요하게 다시 쓰는 것을 막는다(원본 동작 보존).
     func rememberCustomDuration(_ seconds: TimeInterval) {
+        guard seconds.isFinite && seconds > 0 else { return }
         recentCustomDurations = CustomDurationMRU.inserting(seconds, into: recentCustomDurations)
     }
 }

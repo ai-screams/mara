@@ -21,8 +21,11 @@ if [ ! -f "$PROF" ] || [ ! -x "$BIN" ]; then
 fi
 
 REPORT="$(xcrun llvm-cov report "$BIN" -instr-profile "$PROF" Sources/)"
-COV="$(xcrun llvm-cov export "$BIN" -instr-profile "$PROF" -summary-only Sources/ \
-  | python3 -c 'import sys,json; print(round(json.load(sys.stdin)["data"][0]["totals"]["lines"]["percent"],1))')"
+# 판정은 원시값(RAW_COV)으로, 표시만 반올림(COV) — 반올림값을 게이트에 쓰면 79.96%가
+# 80.0%로 반올림돼 통과하는 fail-open 틈이 생긴다(표시 눈금 ≠ 판정값).
+RAW_COV="$(xcrun llvm-cov export "$BIN" -instr-profile "$PROF" -summary-only Sources/ \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"][0]["totals"]["lines"]["percent"])')"
+COV="$(python3 -c "print(round(float('${RAW_COV}'), 1))")"
 
 # 리포트를 CI Step Summary(있으면)와 로그에 남긴다.
 {
@@ -34,7 +37,7 @@ COV="$(xcrun llvm-cov export "$BIN" -instr-profile "$PROF" -summary-only Sources
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 echo "MaraCore line coverage: ${COV}% (floor ${MIN}%)"
-if python3 -c "import sys; sys.exit(0 if float('${COV}') >= float('${MIN}') else 1)"; then
+if python3 -c "import sys; sys.exit(0 if float('${RAW_COV}') >= float('${MIN}') else 1)"; then
   echo "✅ coverage OK"
 else
   echo "::error::coverage ${COV}% is below floor ${MIN}% — add tests or adjust COVERAGE_MIN"
