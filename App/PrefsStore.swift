@@ -52,9 +52,9 @@ final class PrefsStore: ObservableObject {
         lowBatteryThreshold = d.integer(forKey: Keys.lowBatteryThreshold)
         notifyAutoSessionChanges = d.bool(forKey: Keys.notifyAutoSessionChanges)
         hasShownFirstRunGuide = d.bool(forKey: Keys.hasShownFirstRunGuide)
-        // 신뢰 경계: plist는 외부에서 조작될 수 있다 — 비유한·비양수 값과 초과 길이를 로드 시 걸러낸다.
+        // 신뢰 경계: plist는 외부에서 조작될 수 있다 — 비유한·비양수 값과 초과 길이를 로드 시 걸러낸다(Core).
         let loaded = (d.array(forKey: Keys.recentCustomDurations) as? [TimeInterval]) ?? []
-        recentCustomDurations = Array(loaded.filter { $0.isFinite && $0 > 0 }.prefix(3))
+        recentCustomDurations = CustomDurationMRU.sanitizing(loaded)
         if let data = d.data(forKey: Keys.triggerConfig),
            let cfg = try? JSONDecoder().decode(TriggerConfig.self, from: data) {
             triggerConfig = cfg
@@ -68,10 +68,11 @@ final class PrefsStore: ObservableObject {
     }
 
     /// MRU 갱신: 같은 값은 앞으로 끌어올리고, 3개 초과분은 버린다.
+    /// 순수 로직(중복 제거·cap)은 Core `CustomDurationMRU.inserting`이 담당(테스트됨).
+    /// 무효 입력은 여기서 완전 no-op으로 조기 반환한다 — 같은 값 재대입 시 @Published/didSet이
+    /// 재발화해 UserDefaults를 불필요하게 다시 쓰는 것을 막는다(원본 동작 보존).
     func rememberCustomDuration(_ seconds: TimeInterval) {
-        guard seconds.isFinite && seconds > 0 else { return }   // 쓰기 경로도 가드 — 로드 필터와 대칭(2계층 완결)
-        var list = recentCustomDurations.filter { $0 != seconds }
-        list.insert(seconds, at: 0)
-        recentCustomDurations = Array(list.prefix(3))
+        guard seconds.isFinite && seconds > 0 else { return }
+        recentCustomDurations = CustomDurationMRU.inserting(seconds, into: recentCustomDurations)
     }
 }

@@ -81,12 +81,8 @@ struct CustomKeepAwakeView: View {
         case .duration:
             return .duration(durationSeconds)
         case .until:
-            let cal = Calendar.current
-            let hm = cal.dateComponents([.hour, .minute], from: untilTime)
-            var target = cal.nextDate(after: Date(), matching: hm, matchingPolicy: .nextTime) ?? untilTime
-            // DST-safe rollover: 달력 기준 +1일 (24 * 3600 고정 대신)
-            if target <= Date() { target = cal.date(byAdding: .day, value: 1, to: target) ?? target }
-            return .until(target)
+            // 시각 해석(오늘/내일 롤오버, DST-safe)은 Core `UntilResolver`가 담당(테스트됨).
+            return .until(UntilResolver.resolve(timeOfDay: untilTime, now: Date()))
         }
     }
 
