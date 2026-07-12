@@ -21,10 +21,14 @@ jobs:
           swift --version
           xcodebuild -version
 
-      - name: Run MaraCore unit tests
+      - name: Run MaraCore unit tests (with coverage)
         run: |
           cd MaraCore
-          swift test
+          swift test --enable-code-coverage
+
+      - name: Coverage report & floor gate
+        # 라인 커버리지를 Step Summary에 리포트하고 COVERAGE_MIN(기본 80%) 미만이면 실패.
+        run: scripts/coverage.sh
 
       - name: Install XcodeGen (pinned, checksum-verified)
         # release.yml 과 동일 스크립트 — 이 PR CI 가 릴리스와 같은 설치 경로를 실증한다.

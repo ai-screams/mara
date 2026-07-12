@@ -244,50 +244,35 @@ struct SettingsView: View {
 
     // MARK: - Trigger diagnostics formatter
 
-    /// Core 진단 값 → 표시 문구(영어) 매핑. 토글 OFF면 nil(행 숨김).
-    /// enabled인데 감시 목록이 비면 armed되지 않으므로(activeSpecs 제외) 안내 문구를 반환한다.
+    /// Core `TriggerStatusText` 결정 → 표시 문구(영어) 매핑. 토글 OFF면 nil(행 숨김).
+    /// 분기 로직은 Core(`TriggerStatusText.evaluate`, 테스트됨)에 있고, 이 함수는 문구 렌더링만 맡는다.
     static func triggerStatus(_ kind: TriggerKind, config: TriggerConfig, snapshot: TriggerEngineSnapshot)
         -> (active: Bool, text: String)? {
-        switch kind {
-        case .charging:
-            guard config.chargingEnabled else { return nil }
-        case .externalDisplay:
-            guard config.externalDisplayEnabled else { return nil }
-        case .appRunning:
-            guard config.appRunningEnabled else { return nil }
-            guard !config.watchedBundleIDs.isEmpty else {
-                return (false, "Add app bundle IDs below to activate")
-            }
-        case .network:
-            guard config.networkEnabled else { return nil }
-            guard !config.watchedNetworks.isEmpty else {
-                return (false, "Remember a network below to activate")
-            }
-        }
-        // 설정 반영은 300ms debounce — 재조정 전엔 스냅샷에 아직 없을 수 있다(일시 상태).
-        guard let snap = snapshot.trigger(kind) else { return (false, "Checking…") }
-        let active = snap.isSatisfied
-        switch snap.diagnostic {
-        case .charging(let onAC):
+        guard let status = TriggerStatusText.evaluate(kind, config: config, snapshot: snapshot) else { return nil }
+        switch status {
+        case .needsWatchList(.appRunning):
+            return (false, "Add app bundle IDs below to activate")
+        case .needsWatchList(.network):
+            return (false, "Remember a network below to activate")
+        case .needsWatchList:
+            return (false, "Add entries below to activate")   // 도달 불가(appRunning/network만) — 망라성용
+        case .checking:
+            return (false, "Checking…")
+        case .charging(let active, let onAC):
             return (active, onAC ? "Active — on AC power" : "Inactive — on battery")
-        case .externalDisplay(let count):
+        case .externalDisplay(let active, let count):
             return (active, active ? "Active — \(count) displays" : "Inactive — built-in display only")
-        case .appRunning(let matched):
-            if matched.count == 1, let id = matched.first {
-                return (active, "Active — \(id) running")
-            }
-            if active {
-                return (true, "Active — \(matched.count) watched apps running")
-            }
-            // 감시 개수를 함께 표기 — "목록은 인식됐는데 매칭이 없다"를 알려
-            // 사용자가 오타 가능성 vs 앱 미실행으로 가설을 좁힐 수 있게 한다.
-            let watched = config.watchedBundleIDs.count
+        case .appRunningSingle(let active, let id):
+            return (active, "Active — \(id) running")
+        case .appRunningMultiple(let count):
+            return (true, "Active — \(count) watched apps running")
+        case .appRunningNone(let watched):
+            // 감시 개수를 함께 표기 — 오타 가능성 vs 앱 미실행으로 가설을 좁힐 수 있게 한다.
             return (false, "Inactive — \(watched) \(watched == 1 ? "app" : "apps") watched, none running")
-        case .network(let current, let matched):
-            guard let current else { return (active, "Inactive — can't resolve gateway") }
-            return (active, matched ? "Active — \(current.gatewayMAC)"
-                                    : "Inactive — different network")
-        case nil:
+        case .network(let active, let mac, let matched):
+            guard let mac else { return (active, "Inactive — can't resolve gateway") }
+            return (active, matched ? "Active — \(mac)" : "Inactive — different network")
+        case .plain(let active):
             return (active, active ? "Active" : "Inactive")
         }
     }
