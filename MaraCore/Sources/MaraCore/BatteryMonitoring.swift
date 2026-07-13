@@ -69,8 +69,15 @@ public final class IOKitBatteryMonitor: BatteryMonitoring {
         else { return .unavailable }
         guard let source = list.first else { return .desktop }
         guard let description = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue()
-                as? [String: Any],
-              let current = description[kIOPSCurrentCapacityKey] as? Int,
+                as? [String: Any]
+        else { return .unavailable }
+        return parse(description)
+    }
+
+    /// IOPS 전원 소스 description → BatterySnapshot 순수 변환.
+    /// IOKit 호출과 분리해 두어 하드웨어 없이(헤드리스 CI 포함) 유닛테스트가 가능하다.
+    static func parse(_ description: [String: Any]) -> BatterySnapshot {
+        guard let current = description[kIOPSCurrentCapacityKey] as? Int,
               let maximum = description[kIOPSMaxCapacityKey] as? Int,
               maximum > 0,
               let state = description[kIOPSPowerSourceStateKey] as? String
