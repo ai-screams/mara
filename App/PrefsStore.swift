@@ -81,6 +81,7 @@ final class PrefsStore: ObservableObject {
     }
 
     private static func sanitizeBatteryThreshold(_ value: Int) -> Int {
-        min(max(value, 5), 100)
+        let range = SessionManager.batteryThresholdRange
+        return min(max(value, range.lowerBound), range.upperBound)
     }
 }
