@@ -144,15 +144,23 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         // 서브메뉴도 메인 메뉴와 같은 디자인 언어: 전 항목 SF Symbol + "Recent" 섹션 헤더.
         let durMenu = NSMenu()
-        durMenu.addItem(durationItem("15 minutes", 15 * 60))
-        durMenu.addItem(durationItem("1 hour", 60 * 60))
-        durMenu.addItem(durationItem("2 hours", 2 * 60 * 60))
-        durMenu.addItem(durationItem("5 hours", 5 * 60 * 60))
+        let durationPresets: [(title: String, seconds: TimeInterval)] = [
+            ("15 minutes", 15 * 60),
+            ("1 hour", 60 * 60),
+            ("2 hours", 2 * 60 * 60),
+            ("5 hours", 5 * 60 * 60),
+        ]
+        for preset in durationPresets {
+            durMenu.addItem(durationItem(preset.title, preset.seconds))
+        }
         // 최근 커스텀 duration(MRU 최대 3) — 원클릭 재사용. Until은 기록되지 않는다.
-        if !env.prefs.recentCustomDurations.isEmpty {
+        let recentDurations = env.prefs.recentCustomDurations.filter { seconds in
+            !durationPresets.contains { $0.seconds == seconds }
+        }
+        if !recentDurations.isEmpty {
             durMenu.addItem(.separator())
             durMenu.addItem(.sectionHeader(title: "Recent"))
-            for seconds in env.prefs.recentCustomDurations {
+            for seconds in recentDurations {
                 durMenu.addItem(durationItem(DurationFormat.compact(seconds), seconds,
                                              symbol: "clock.arrow.circlepath"))
             }
