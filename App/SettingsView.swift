@@ -43,7 +43,8 @@ struct SettingsView: View {
             SettingsToggleRow(symbol: "display", title: "Keep display awake by default",
                               isOn: $prefs.defaultKeepDisplayAwake)
             SettingsStepperRow(symbol: "battery.25", title: "Low-battery auto-off",
-                               value: $prefs.lowBatteryThreshold, range: 5...100, step: 5)
+                               value: $prefs.lowBatteryThreshold,
+                               range: SessionManager.batteryThresholdRange, step: 5)
             SettingsCaption("On battery power, a session won't start—and a running session ends—when the level is at or below the threshold. At 100%, keep-awake never runs on battery.")
             SettingsToggleRow(symbol: "bell.badge", title: "Notify on automatic start & end",
                               isOn: $prefs.notifyAutoSessionChanges)
@@ -170,19 +171,8 @@ struct SettingsView: View {
             }
 
             ForEach(prefs.triggerConfig.watchedBundleIDs, id: \.self) { id in
-                HStack {
-                    Text(id.rawValue)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(MaraTheme.textMid)
-                    Spacer()
-                    Button {
-                        prefs.triggerConfig.removeWatchedBundleID(id)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(MaraTheme.muted)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Remove \(id.rawValue)")
+                RemovableChipRow(text: id.rawValue) {
+                    prefs.triggerConfig.removeWatchedBundleID(id)
                 }
             }
 
@@ -227,19 +217,8 @@ struct SettingsView: View {
             .disabled(currentNetwork() == nil)
 
             ForEach(prefs.triggerConfig.watchedNetworks, id: \.self) { mac in
-                HStack {
-                    Text(mac)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(MaraTheme.textMid)
-                    Spacer()
-                    Button {
-                        prefs.triggerConfig.watchedNetworks.removeAll { $0 == mac }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(MaraTheme.muted)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Remove \(mac)")
+                RemovableChipRow(text: mac) {
+                    prefs.triggerConfig.watchedNetworks.removeAll { $0 == mac }
                 }
             }
         }
