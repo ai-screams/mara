@@ -18,6 +18,20 @@ final class RoutingTableNetworkProviderTests: XCTestCase {
         XCTAssertEqual(reader.currentReadCount, 3)
     }
 
+    func test_refresh_succeedsOnFirstAttempt_withoutRetry() async {
+        let expected = NetworkIdentity(gatewayMAC: "aa:bb:cc:dd:ee:ff")
+        let reader = SequenceIdentityReader([expected])
+        let provider = RoutingTableNetworkProvider(
+            readIdentity: { reader.read() },
+            retryDelays: [.zero, .zero]
+        )
+
+        await provider.refreshForTesting()
+
+        XCTAssertEqual(provider.current, expected)
+        XCTAssertEqual(reader.currentReadCount, 1)   // 첫 read 성공 → sleep/재시도 경로 안 탐
+    }
+
     func test_refresh_stopsAfterBoundedAttempts() async {
         let reader = SequenceIdentityReader([nil, nil, nil, nil])
         let provider = RoutingTableNetworkProvider(

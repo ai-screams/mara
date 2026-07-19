@@ -89,6 +89,12 @@ public final class SleepEngine {
         return .failure(SleepEngineFailure(failures))
     }
 
-    // 정리는 실패를 호출자에게 돌려줄 수 있는 명시적 releaseAll 경계에서만 수행한다.
-    // 프로세스 비정상 종료 시 남은 assertion은 IOKit이 프로세스 수명과 함께 회수한다.
+    // 의도적으로 deinit이 없다. 정리는 실패를 호출자에게 돌려줄 수 있는 명시적 releaseAll
+    // 경계에서만 수행한다(deinit은 실패를 전파 못 함). 프로세스 비정상 종료 시 남은 assertion은
+    // IOKit이 프로세스 수명과 함께 회수한다.
+    //
+    // ⚠️ 전제: SleepEngine은 App 수명 동안 사는 단일 인스턴스(AppEnvironment 소유)다.
+    // 이 전제에서만 "deinit 없음"이 안전하다 — 단명 인스턴스를 새로 만들면 소유자가
+    // 놓기 전에 반드시 releaseAll()을 호출해야 assertion이 프로세스 종료까지 새지 않는다.
+    // (형제 OS 어댑터들은 재생성될 수 있어 deinit에서 best-effort 정리를 하는 것과 다른 이유.)
 }
