@@ -20,7 +20,15 @@ public final class SessionManager: ObservableObject {
     private var batteryThreshold: Int
     public var lowBatteryThreshold: Int {
         get { batteryThreshold }
-        set { batteryThreshold = Self.clampBatteryThreshold(newValue) }
+        set {
+            batteryThreshold = Self.clampBatteryThreshold(newValue)
+            // 활성 세션 중 임계값을 올려 지금 배터리가 위반이 되면, 다음 스냅샷을
+            // 기다리지 않고 즉시 종료한다(설정과 라이브 세션이 어긋나는 창 제거).
+            // init은 batteryThreshold를 직접 대입해 이 setter를 우회하므로 여기 안 온다.
+            if state.isActive, let percent = batteryFloorBreach(battery?.snapshot) {
+                _ = stop(reason: .lowBattery(percent: percent))
+            }
+        }
     }
     private var timer: SchedulerToken?
     private var cancellables = Set<AnyCancellable>()

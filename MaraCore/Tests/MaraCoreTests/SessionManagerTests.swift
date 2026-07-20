@@ -136,6 +136,44 @@ extension SessionManagerTests {
         XCTAssertEqual(sm.lastFailure, .lowBattery(percent: 15))
     }
 
+    // #1: 활성 세션 중 임계값을 올려 지금 배터리가 위반이 되면 즉시(다음 스냅샷 전) 종료한다.
+    func test_raisingThresholdIntoBreach_stopsActiveSessionImmediately() {
+        let (sm, _, _, _) = makeSUTWithBattery(threshold: 20, percentage: 30, isOnAC: false)
+        _ = sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        XCTAssertTrue(sm.state.isActive)   // 30% > 20% → 시작됨
+
+        sm.lowBatteryThreshold = 50        // 30% <= 50% → 즉시 위반
+
+        XCTAssertEqual(sm.state, .inactive)
+        XCTAssertEqual(sm.recentEvents.last?.kind, .stopped(.lowBattery(percent: 30)))
+    }
+
+    // 임계값을 올려도 AC 연결 중이면 종료하지 않는다(veto는 배터리 구동 한정).
+    func test_raisingThreshold_doesNotStopWhenOnAC() {
+        let (sm, _, _, _) = makeSUTWithBattery(threshold: 20, percentage: 30, isOnAC: true)
+        _ = sm.start(SessionConfig(scope: .systemOnly, duration: .indefinite, origin: .manual))
+        sm.lowBatteryThreshold = 50
+        XCTAssertTrue(sm.state.isActive)   // AC라 veto 미적용
+    }
+
+    // #2: IOKit 이중 실패(display create 실패 + system release 실패)의 benign orphan을 못박는다.
+    // start는 거부되고 state는 inactive지만 system assertion은 보유된다(안전한 방향 —
+    // "거짓 awake"가 아니라 "실제로 잠들기 방지 중인데 UI만 off"). 다음 start/종료가 회수한다.
+    func test_doubleIOKitFailure_rejectsButRetainsAssertion_benignOrphan() {
+        let (sm, _, p, _) = makeSUTWithBattery(threshold: 20, percentage: 100, isOnAC: true)
+        p.failingCreateTypes = [.preventDisplaySleep]   // display 생성 실패(system은 성공)
+        p.failNextRelease = true                        // 롤백의 system 해제도 실패
+
+        guard case .failure(.power) = sm.start(
+            SessionConfig(scope: .displayAndSystem, duration: .indefinite, origin: .manual)
+        ) else {
+            return XCTFail("expected power failure on display-create + rollback-release double fault")
+        }
+
+        XCTAssertEqual(sm.state, .inactive)   // UI는 off (거짓 awake 아님)
+        XCTAssertEqual(p.live.count, 1)       // 그러나 system assertion은 보유(안전한 방향, 다음 start/종료가 회수)
+    }
+
     func test_lowBatteryPreReject_precedesDurationValidation() {
         let (sm, _, _, _) = makeSUTWithBattery(threshold: 20, percentage: 10, isOnAC: false)
 
