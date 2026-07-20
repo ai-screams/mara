@@ -56,13 +56,14 @@ extension MenuBarTint {
 
 /// 앱 UI accent — 선택된 `MenuBarTint`를 따라간다. 각 창 루트가 `.maraAccent(_:)`로 주입하고,
 /// 자식 뷰는 `@Environment(\.accentTint)`로 읽는다. 배경(bg/card)은 다크 "Night Watch" 유지 —
-/// 바뀌는 건 강조색뿐(컨트롤·아이콘·glow). 기본값은 브랜드 오렌지(주입 안 된 곳 폴백).
+/// 바뀌는 건 강조색뿐(컨트롤·아이콘·glow). 기본값은 실제 기본 tint(ember) — 주입 안 된
+/// 표면이 생겨도 팔레트에 없는 색이 아니라 진짜 기본색으로 폴백한다(기본 tint가 바뀌면 자동 추종).
 ///
 /// 주의: `.maraAccent`를 뷰 body 안에서 걸면 **자식**에만 적용된다 — 그 뷰 자신의 `@Environment`는
 /// 부모값을 읽으므로, prefs를 가진 루트(SettingsView·CustomKeepAwakeView)는 자기 참조엔
 /// `prefs.menuBarTint.accentColor`를 직접 쓰고 자식 구조체만 `\.accentTint`로 읽는다.
 private struct AccentTintKey: EnvironmentKey {
-    static let defaultValue: Color = MaraTheme.accent
+    static let defaultValue: Color = MenuBarTint.default.accentColor
 }
 
 extension EnvironmentValues {
