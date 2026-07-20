@@ -10,6 +10,13 @@ private struct KeepAwakeIntentError: LocalizedError {
     init(_ failure: SessionFailure) { errorDescription = SessionFailureText.describe(failure) }
 }
 
+/// Shortcuts 인텐트 공통 경계 — Core의 Result 실패를 읽을 수 있는 LocalizedError로 변환한다.
+/// .get()은 typed throws로 SessionFailure를 던진다(error가 이미 그 타입). commander 호출은
+/// @MainActor perform()에서 평가되고 Sendable한 Result만 넘겨받아 격리 문제가 없다.
+private func runIntent(_ result: Result<Void, SessionFailure>) throws {
+    do { try result.get() } catch { throw KeepAwakeIntentError(error) }
+}
+
 // duration은 옵셔널 네이티브 파라미터(nil=무기한). 상한 클램프는 Core(SessionCommander)가 담당.
 struct StartKeepAwakeIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Keep Awake"
@@ -23,12 +30,7 @@ struct StartKeepAwakeIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         let seconds = duration?.converted(to: .seconds).value
-        do {
-            try commander.startKeepAwake(duration: seconds).get()
-        } catch {
-            // .get()은 typed throws로 SessionFailure를 던진다 — error가 이미 그 타입.
-            throw KeepAwakeIntentError(error)
-        }
+        try runIntent(commander.startKeepAwake(duration: seconds))
         return .result()
     }
 }
@@ -40,12 +42,7 @@ struct StopKeepAwakeIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        do {
-            try commander.stopKeepAwake().get()
-        } catch {
-            // .get()은 typed throws로 SessionFailure를 던진다 — error가 이미 그 타입.
-            throw KeepAwakeIntentError(error)
-        }
+        try runIntent(commander.stopKeepAwake())
         return .result()
     }
 }
