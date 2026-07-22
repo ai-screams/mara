@@ -17,11 +17,16 @@
 - 로컬 Release 리빌드가 **기존 서명 번들** 위에서 `"Operation not permitted"`(AppIcon.icns 복사 등)로 실패하면,
   App Management TCC가 서명된 `.app`의 **in-place 수정**을 막는 것이다(uchg 플래그 아님). 정공법 = stale 번들을
   `rm -rf`(삭제는 허용 — 우회 아님)한 뒤 **클린 리빌드**(실행 중이면 먼저 quit). 실사고 1회(B→C 배포 중).
+- 더 안전한 정공법: 로컬 App 빌드/스모크는 **격리 `-derivedDataPath`(scratchpad)**로 하라 — 라이브 Mara가 도는
+  공유 DerivedData(`~/Library/.../Products/Release/Mara.app`)를 안 건드려 위 TCC in-place 차단·라이브 앱 손상을
+  동시에 회피. 격리 빌드로 **성공+심볼 검증 후에만** quit→pgrep 확인→교체(다운타임 0, 검증 전 교체 금지).
 - QA 빌드 설치 전 **산출물 심볼 검증** 필수: `grep -c -a '<새 셀렉터/타입명>' <APP>/Contents/MacOS/Mara` ≥1 확인 후 설치.
   서브에이전트는 각자 derivedDataPath에 빌드하므로 컨트롤러 경로의 산출물은 낡았을 수 있다(실사고 1회).
   유니코드 포함 문자열("Custom…" 등)은 strings|grep에 안 잡힘 — ASCII 심볼명으로 검사.
   최적화(-O) Release에선 짧은 문자열(≤15B, 예 "Icon Color")도 Swift SmallString로 인라인돼 grep에 안 잡힌다
   — Debug(`.debug.dylib`)엔 남지만 Release는 셀렉터/타입명(`setMenuBarTint`·`MenuBarTint`)으로 검증(실사고 1회).
+  Debug 빌드는 코드가 `Mara.debug.dylib`에 있고 `Contents/MacOS/Mara`는 얇은 런처 — Debug 산출물 심볼 grep은
+  `.debug.dylib` 대상(또는 MacOS 디렉터리 `grep -r`). thin 런처만 grep하면 false 0(실사고 1회).
 - xcodebuild·git은 리포 루트에서 실행 — cwd는 셸 호출 간 지속·백그라운드로 상속됨(MaraCore에 남아 무실행 실사고 1회).
   파이프(`| tail`)가 exit code를 삼키므로 컴파일 검증은 "BUILD SUCCEEDED" 문자열 확인으로 판정.
 - Core `swift test`는 App(AppKit/SwiftUI) 컴파일을 검증 안 함 — Core enum에 케이스 추가(예:
@@ -63,6 +68,8 @@
   scripts/release.sh App/Info.plist project.yml` — 비어있으면 릴리스 경로가 직전 성공본과 byte-identical(실패 리스크 최소).
 - **검증은 게시된 산출물로**: `gh release download` → spctl/stapler/appcast/`.background` 확인.
   로컬 재현 검증은 이 리포에서 두 번 틀렸다(메뉴바 오렌지, DMG 배경).
+- appcast 검증 시 `sparkle:version`은 **자식 엘리먼트**(`<sparkle:version>N</sparkle:version>`)지 속성 아님 —
+  속성 grep(`sparkle:version="…"`)은 빈 결과. shortVersionString도 동일. edSignature만 enclosure 속성.
 - `scripts/release.sh`는 **zsh**: `${VAR:+--flag "$VAR"}`는 단어 분리 안 됨 — 인자는 배열로 구성.
 - codesign 서명 검증: Hardened Runtime 신호는 `flags=…(runtime)`(CodeDirectory 플래그)이지 `Runtime Version=`
   (SDK 버전)이 아니다. leaf 인증서는 `Authority=Developer ID Application`, `…Certification Authority`는 중간 CA.
