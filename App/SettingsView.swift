@@ -163,6 +163,9 @@ struct SettingsView: View {
         } label: {
             Label("Support", systemImage: SponsorLink.containerSymbol)
         }
+        // soft-deprecated(SDK: deprecated 100000.0 센티넬 — 현재 경고 없음). Apple이 실제 버전을 배정하면
+        // SWIFT_TREAT_WARNINGS_AS_ERRORS=YES 빌드가 깨진다. 대체는 `.menuStyle(.button).buttonStyle(.borderless)`
+        // 인데 렌더가 달라져 눈 확인 필요 — 블라인드 스왑 금지. CI가 이 줄로 깨지면 그때 교체+스크린샷.
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
