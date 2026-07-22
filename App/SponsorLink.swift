@@ -43,11 +43,16 @@ enum SponsorLink: CaseIterable {
         }
     }
 
-    /// 기본 브라우저로 연다. 리터럴 URL이라 파싱은 실패할 수 없지만, 강제 언랩 대신
-    /// 조용히 무시한다(심볼 로딩과 같은 방어적 스타일).
+    /// 기본 브라우저로 연다. 파싱 실패(리터럴이라 사실상 불가)든 NSWorkspace 실행 실패든
+    /// 무음으로 두지 않고 beep으로 알린다 — 아이콘 누락(NSImage nil)과 달리, 사용자가 요청한
+    /// 외부 이동을 삼키면 "클릭했는데 아무 일도 안 남"이 된다. 앱의 실패=beep 계약과 일치
+    /// (StatusBarController.report 참조). open(_:)의 Bool 반환을 가드 조건으로 확인한다.
     @MainActor
     func open() {
-        guard let url = URL(string: urlString) else { return }
-        NSWorkspace.shared.open(url)
+        guard let url = URL(string: urlString),
+              NSWorkspace.shared.open(url) else {
+            NSSound.beep()
+            return
+        }
     }
 }
