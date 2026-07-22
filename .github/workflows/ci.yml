@@ -23,7 +23,25 @@ jobs:
 
       - name: Sponsor link parity
         # 후원 URL이 App·README·랜딩·FUNDING 네 곳에서 갈라지지 않게 고정(핸들만 바꾸고 표면 놓치면 404). 빠른 fail.
-        run: scripts/check-sponsor-links.sh
+        # --selftest는 가드 자체를 fixture로 검증한다 — 이 검사는 도입 당시 `/typo` 접미사를 조용히
+        # 통과시켰다. 가드가 아무것도 안 잡으면서 초록인 상태를 막는다.
+        run: |
+          scripts/check-sponsor-links.sh --selftest
+          scripts/check-sponsor-links.sh
+
+      - name: Release version grammar selftest
+        # release.sh와 release.yml appcast 스텝이 공유하는 태그 문법의 반례 고정.
+        # 태그를 밀어야만 검증되던 경로를 PR CI로 당긴다(v* 태그는 룰셋상 불변이라 재시도 불가).
+        run: |
+          scripts/check-release-version.sh --selftest
+          # 문법이 맞는 것과 가드가 실제로 '불린다'는 것은 다른 명제다. 두 호출부가 떨어져 나가면
+          # (인라인·삭제) 위 selftest는 계속 초록이고, 태그를 민 뒤에야 드러난다 — 그런데 v* 태그는
+          # 불변이라 패치 범프로만 복구된다(RELEASING.md). 그 발견 시점을 PR로 당긴다.
+          # rename은 이 파일이 같은 경로를 참조하므로 자동으로 잡힌다.
+          grep -q 'check-release-version\.sh' scripts/release.sh \
+            || { echo "::error::release.sh no longer calls check-release-version.sh"; exit 1; }
+          grep -q 'check-release-version\.sh' .github/workflows/release.yml \
+            || { echo "::error::release.yml appcast step no longer calls check-release-version.sh"; exit 1; }
 
       - name: Run MaraCore unit tests (with coverage)
         run: |
