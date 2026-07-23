@@ -59,9 +59,10 @@ pick the update up from `releases/latest/download/appcast.xml` (pre-releases —
 are excluded from `latest` automatically).
 
 The release job runs in a protected **`release` environment** and all actions are pinned to commit
-SHAs (Dependabot keeps them current). With a required reviewer on the environment, a pushed tag
-**waits for human approval** before the signing/notarization secrets are exposed — so a stolen tag
-push cannot publish a signed build on its own.
+SHAs (Dependabot keeps them current). A pushed tag **waits for manual confirmation** before the
+signing/notarization secrets are exposed. The organization currently has one maintainer, so this is
+not independent separation of duties: it blocks an unattended tag push, but does not claim to defend
+against full compromise of the maintainer account. Administrator bypass is disabled.
 
 ### Required secrets (set on the `release` environment)
 
@@ -101,8 +102,9 @@ requires shipping a new `SUPublicEDKey` via a manually-downloaded release.
 
 ### Enabling the automated release (one-time)
 
-1. **Settings → Environments → New environment** → name it `release`. Add yourself as a
-   **Required reviewer** (and optionally restrict deployment branches/tags).
+1. **Settings → Environments → New environment** → name it `release`. Add the maintainer as a
+   **Required reviewer**, disable administrator bypass, and restrict deployment to `v*` tags. In a
+   multi-maintainer organization, use a second trusted reviewer and enable prevent-self-review.
 2. Add the secrets above to that environment.
 3. (Recommended) **Settings → Tags** → add a protection rule for `v*` so only maintainers can push
    release tags.

@@ -5,7 +5,8 @@ name: Release
 #
 # 보안 하드닝:
 #  - `environment: release`로 배포를 게이트한다(저장소 설정에서 required reviewer + 환경 한정 secret 지정).
-#    → 태그 푸시 권한이 탈취돼도 사람이 승인해야 서명·공증·릴리스가 실행된다.
+#    현재 1인 조직이라 동일 유지보자의 수동 확인이며 독립 승인은 아니다. 무인 태그 push는 막지만
+#    유지보자 계정 전체 탈취까지 방어한다고 과장하지 않는다.
 #  - 모든 액션은 commit SHA로 핀(공급망: 태그 변조 방지). 버전 주석은 Dependabot이 갱신한다.
 #  - permissions는 최소(contents: write)로만. 게다가 checkout에 persist-credentials: false를 줘서
 #    그 쓰기 토큰이 빌드·서명 스텝 전체에 살아있지 않게 한다(권한 수명 최소화).

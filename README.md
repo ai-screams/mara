@@ -167,7 +167,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The release workflow runs in a protected `release` environment (requires reviewer approval before the signing/notarization secrets are exposed), builds and notarizes the DMG, signs the update feed after verifying the signing key matches the key embedded in the app, and attaches the DMG, its `.sha256` checksum, and `appcast.xml` to a GitHub Release. Installed apps pick updates up from `releases/latest/download/appcast.xml`. Prerelease tags (containing `-`, e.g. `v1.0.0-rc.1`) are published as pre-releases and excluded from "latest". Full steps and required secrets are in [RELEASING.md](RELEASING.md).
+The release workflow runs in a protected `release` environment (the current one-maintainer organization uses a manual confirmation before signing/notarization secrets are exposed; this is not independent separation of duties), builds and notarizes the DMG, signs the update feed after verifying the signing key matches the key embedded in the app, and attaches the DMG, its `.sha256` checksum, and `appcast.xml` to a GitHub Release. Installed apps pick updates up from `releases/latest/download/appcast.xml`. Prerelease tags (containing `-`, e.g. `v1.0.0-rc.1`) are published as pre-releases and excluded from "latest". Full steps and required secrets are in [RELEASING.md](RELEASING.md).
 
 ## Quality gates
 
