@@ -25,9 +25,10 @@ REPO_URL="https://github.com/ai-screams/Mara"
 # canonical을 담아야 하는 표면(누락 방지). 나머지 파일은 아래 금지 패턴으로만 검사한다.
 REQUIRE_SITE=("README.md" "docs/index.html")
 
-# 금지 패턴. `/mara`는 소문자만 매칭되므로 올바른 `/Mara`는 걸리지 않는다.
+# 후보 패턴은 대소문자 무시로 찾고, 아래에서 canonical 철자만 제거한 뒤 남은 변형을 거부한다.
+# 단순히 소문자 `/mara`만 금지하면 `/MARA`, `/MaRa` 같은 또 다른 404가 통과한다.
 # http:// 도 금지한다 — 이 페이지가 DMG 다운로드 링크를 제공하므로 평문 HTTP로 참조할 이유가 없다.
-FORBIDDEN_RE='ai-scream\.ai/mara|ai-screams/mara|http://ai-scream\.ai'
+CANDIDATE_RE='ai-scream\.ai/mara|ai-screams/mara|http://ai-scream\.ai'
 
 # 이 스크립트 자신은 금지 패턴을 '문자열로' 담고 있으므로 스캔에서 제외한다(자기 오탐 방지).
 SELF="scripts/check-site-links.sh"
@@ -35,18 +36,29 @@ SELF="scripts/check-site-links.sh"
 fail() { echo "❌ site-links: $1" >&2; exit 1; }
 
 check_repo() {
-  local files hits f
-  # 대상은 `git ls-files`로 **자동 탐색** — 표면 목록을 하드코딩하면 새 파일이 조용히 빠진다.
-  # 실제로 이번 감사는 README·docs만 봐서 App/Info.plist·RELEASING.md·배지 URL을 놓쳤다.
-  files="$(git ls-files | grep -v "^${SELF}$" || true)"
-  [ -n "$files" ] || fail "git ls-files가 비었다 — 리포 루트에서 실행했는지 확인(가드가 아무것도 검사 못 함)"
+  local record sanitized bad=0 f
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    || fail "git 리포 안에서 실행해야 함(가드가 아무것도 검사 못 함)"
 
-  # -I: 바이너리(png 등) 건너뜀. 히트가 있으면 파일:라인을 그대로 보여준다.
-  hits="$(echo "$files" | xargs grep -InE "$FORBIDDEN_RE" || true)"
-  if [ -n "$hits" ]; then
-    echo "$hits" >&2
-    fail "소문자 경로 또는 평문 HTTP URL 발견 — 위 위치를 ${SITE_URL} / ${REPO_URL} 형태로 고칠 것"
-  fi
+  # `git grep`가 tracked file을 직접 순회하므로 `git ls-files | xargs grep`의 공백 파일명 분해가 없다.
+  # 후보를 -i로 넓게 찾은 뒤 정확한 canonical 두 문자열만 제거한다. 한 줄에 정상·오류 URL이 함께
+  # 있어도 오류 변형이 남으므로 fail한다. -I는 png 같은 바이너리를 건너뛴다.
+  while IFS= read -r record; do
+    if printf '%s\n' "$record" | grep -qE 'http://ai-scream\.ai'; then
+      echo "$record" >&2
+      bad=1
+      continue
+    fi
+    sanitized="${record//ai-scream.ai\/Mara/}"
+    sanitized="${sanitized//ai-screams\/Mara/}"
+    if printf '%s\n' "$sanitized" | grep -qiE 'ai-scream\.ai/mara|ai-screams/mara'; then
+      echo "$record" >&2
+      bad=1
+    fi
+  done < <(git grep -InEi "$CANDIDATE_RE" -- . ":(exclude)$SELF" || true)
+
+  [ "$bad" -eq 0 ] \
+    || fail "잘못된 대소문자 또는 평문 HTTP URL 발견 — 위 위치를 ${SITE_URL} / ${REPO_URL} 형태로 고칠 것"
 
   for f in "${REQUIRE_SITE[@]}"; do
     [ -f "$f" ] || fail "표면 파일 없음: $f"
@@ -57,16 +69,16 @@ check_repo() {
 }
 
 # --selftest: 임시 git 리포 fixture로 '가드가 실제로 잡는지' 검증한다.
-# git ls-files로 탐색하므로 fixture도 git init + add가 필요하다.
+# git grep로 tracked file을 탐색하므로 fixture도 git init + add가 필요하다.
 selftest() {
   local failed=0
-  run_case() { # name expect(pass|fail) readme_url [extra_file_content]
-    local name="$1" expect="$2" url="$3" extra="${4:-}" tmp rc got
+  run_case() { # name expect(pass|fail) readme_url [extra_file_content] [extra_file_name]
+    local name="$1" expect="$2" url="$3" extra="${4:-}" extra_name="${5:-Info.plist}" tmp rc got
     tmp="$(mktemp -d)"
     mkdir -p "$tmp/docs"
     printf '<a href="%s">Website</a>\n' "$url" > "$tmp/README.md"
     printf '<link rel="canonical" href="%s" />\n' "$url" > "$tmp/docs/index.html"
-    [ -z "$extra" ] || printf '%s\n' "$extra" > "$tmp/Info.plist"
+    [ -z "$extra" ] || printf '%s\n' "$extra" > "$tmp/$extra_name"
     ( cd "$tmp" && git init -q . && git add -A ) >/dev/null 2>&1
     rc=0
     ( cd "$tmp" && "$SCRIPT_PATH" ) >/dev/null 2>&1 || rc=$?
@@ -82,18 +94,23 @@ selftest() {
 
   run_case "canonical"                  pass "https://ai-scream.ai/Mara/"
   run_case "소문자 사이트 경로"           fail "https://ai-scream.ai/mara/"
+  run_case "대문자 변형 사이트 경로"       fail "https://ai-scream.ai/MARA/"
+  run_case "혼합 대소문자(다른 파일)"       fail "https://ai-scream.ai/Mara/" \
+    "https://ai-scream.ai/MaRa/"
   run_case "평문 HTTP"                   fail "http://ai-scream.ai/Mara/"
   # 다른 파일(예: Info.plist)에 숨은 소문자 리포 URL도 잡아야 한다 — 이번에 실제로 놓쳤던 유형.
   run_case "다른 파일의 소문자 리포 URL"  fail "https://ai-scream.ai/Mara/" \
     "<string>https://github.com/ai-screams/mara/releases/latest/download/appcast.xml</string>"
   run_case "다른 파일이 올바르면 통과"     pass "https://ai-scream.ai/Mara/" \
     "<string>https://github.com/ai-screams/Mara/releases/latest/download/appcast.xml</string>"
+  run_case "공백 파일명의 오류 URL"         fail "https://ai-scream.ai/Mara/" \
+    "https://ai-scream.ai/mara/" "bad file.txt"
 
   if [ "$failed" -ne 0 ]; then
     echo "❌ site-links: selftest 실패 (가드가 반례를 잡지 못함)" >&2
     exit 1
   fi
-  echo "✅ site-links: selftest 통과 (소문자 경로·평문 HTTP·타 파일 은닉 URL 거부)"
+  echo "✅ site-links: selftest 통과 (모든 대소문자 변형·평문 HTTP·공백 파일명 거부)"
 }
 
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"

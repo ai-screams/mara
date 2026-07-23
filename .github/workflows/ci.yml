@@ -15,11 +15,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 셸·워크플로 린트는 macOS가 필요 없다. ubuntu는 분당 과금이 macOS의 1/10이고 shellcheck가 러너
-  # 이미지에 기본 탑재라 설치가 없다. test 잡과 병렬로 돌아 Xcode 빌드를 기다리지 않고 빨리 실패한다.
+  # 셸·워크플로 린트는 Xcode가 필요 없다. public repo의 표준 Ubuntu/macOS 러너는 모두 무료지만,
+  # Ubuntu에서 병렬 실행하면 제한된 macOS concurrency를 점유하지 않고 더 빨리 실패한다.
   lint:
     name: Lint (shell & workflows)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10   # 실측 1분 미만. 기본 360분은 멈춘 스텝을 방치한다.
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -32,18 +32,30 @@ jobs:
           scripts/check-site-links.sh
 
       - name: ShellCheck (bash scripts)
+        env:
+          # runner 내장 버전은 이미지 갱신에 따라 움직인다. actionlint와 같은 방식으로 버전+공식 asset
+          # digest를 고정해 코드 변경 없이 lint 결과가 바뀌는 일을 막는다.
+          SHELLCHECK_VERSION: "0.11.0"
+          SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
         run: |
-          # 대상은 셔뱅으로 **자동 탐색**한다 — 목록을 하드코딩하면 새로 추가된 스크립트가 조용히
-          # 빠져 "가드가 아무것도 검사 안 하면서 초록"이 된다. zsh 스크립트(release.sh·
-          # generate-project.sh)는 shellcheck가 지원하지 않아 자연히 제외되고, 문법 검사는 test 잡의
-          # `zsh -n`이 담당한다.
-          command -v shellcheck >/dev/null \
-            || { echo "::error::shellcheck not found on runner image"; exit 1; }
-          shellcheck --version | sed -n '2p'
-          files="$(grep -rl '^#!.*bash' scripts .github || true)"
-          [ -n "$files" ] || { echo "::error::bash script discovery found nothing — the guard would check nothing"; exit 1; }
-          echo "$files"
-          echo "$files" | xargs shellcheck
+          archive="shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/${archive}"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "$url"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          shellcheck_bin="$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          "$shellcheck_bin" --version | sed -n '2p'
+
+          # 셔뱅으로 자동 탐색하되 배열을 써서 공백 파일명을 보존한다. zsh는 아래 macOS 문법 검사가 담당.
+          scripts=()
+          while IFS= read -r -d '' file; do
+            first_line="$(head -n 1 "$file")"
+            case "$first_line" in '#!'*bash*) scripts+=("$file") ;; esac
+          done < <(find scripts .github -type f -print0)
+          [ "${#scripts[@]}" -gt 0 ] \
+            || { echo "::error::bash script discovery found nothing — the guard would check nothing"; exit 1; }
+          printf '%s\n' "${scripts[@]}"
+          "$shellcheck_bin" "${scripts[@]}"
 
       - name: actionlint (pinned, checksum-verified)
         env:
@@ -54,7 +66,7 @@ jobs:
           ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
           url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "$url"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" "$url"
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -version
@@ -99,10 +111,17 @@ jobs:
         # zsh가 기본 셸인 이 macOS 잡에서 최소한 문법만이라도 잡는다(설치 0). bash 잡과 같은 이유로
         # 대상은 셔뱅으로 자동 탐색 — 하드코딩하면 새 zsh 스크립트가 조용히 빠진다.
         run: |
-          files="$(grep -rl '^#!.*zsh' scripts || true)"
-          [ -n "$files" ] || { echo "::error::zsh script discovery found nothing — the guard would check nothing"; exit 1; }
-          echo "$files"
-          echo "$files" | xargs -n1 zsh -n
+          scripts=()
+          while IFS= read -r -d '' file; do
+            first_line="$(head -n 1 "$file")"
+            case "$first_line" in '#!'*zsh*) scripts+=("$file") ;; esac
+          done < <(find scripts -type f -print0)
+          [ "${#scripts[@]}" -gt 0 ] \
+            || { echo "::error::zsh script discovery found nothing — the guard would check nothing"; exit 1; }
+          for file in "${scripts[@]}"; do
+            echo "$file"
+            zsh -n "$file"
+          done
 
       - name: Run MaraCore unit tests (with coverage)
         run: |
